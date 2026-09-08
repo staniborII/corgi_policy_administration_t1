@@ -1,0 +1,106 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/auth";
+import { api, type Policy } from "@/lib/api";
+import Nav from "@/components/Nav";
+
+function formatCents(cents: number) {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+function statusBadge(status: string) {
+  const colors: Record<string, string> = {
+    DRAFT: "#0275d8",
+    PENDING_PAYMENT: "#f0ad4e",
+    ACTIVE: "#5cb85c",
+    CANCELLED: "#d9534f",
+    EXPIRED: "#999",
+  };
+  return (
+    <span style={{
+      padding: "2px 8px", borderRadius: 4, fontSize: "0.8rem",
+      backgroundColor: colors[status] || "#999", color: "#fff",
+    }}>
+      {status}
+    </span>
+  );
+}
+
+export default function CustomerPoliciesPage() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+  const [policies, setPolicies] = useState<Policy[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
+  const [error, setError] = useState("");
+  const fetched = useRef(false);
+
+  useEffect(() => {
+    if (loading) return;
+    if (!user || user.role !== "CUSTOMER") {
+      router.replace("/login");
+    }
+  }, [user, loading, router]);
+
+  useEffect(() => {
+    if (loading || !user || fetched.current) return;
+    fetched.current = true;
+    let cancelled = false;
+    api.listPolicies()
+      .then((data) => { if (!cancelled) setPolicies(data); })
+      .catch(() => { if (!cancelled) setError("Failed to load policies."); })
+      .finally(() => { if (!cancelled) setLoadingData(false); });
+    return () => { cancelled = true; };
+  }, [loading, user]);
+
+  if (loading || !user) return null;
+
+  return (
+    <>
+      <Nav />
+      <main style={{ padding: "1.5rem", fontFamily: "system-ui, sans-serif", maxWidth: 900, margin: "0 auto" }}>
+        <h1>My Policies</h1>
+
+        {error && <p style={{ color: "red" }}>{error}</p>}
+        {loadingData && <p>Loading...</p>}
+        {!loadingData && policies.length === 0 && (
+          <div style={{ padding: "2rem", textAlign: "center", color: "#666" }}>
+            <p>No policies found.</p>
+            <p>Your policies will appear here once created by Staff.</p>
+          </div>
+        )}
+
+        {policies.length > 0 && (
+          <div>
+            {policies.map((p) => (
+              <div key={p.id} style={{
+                border: "1px solid #ddd", borderRadius: 4, padding: "1rem",
+                marginBottom: "1rem",
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <h3 style={{ margin: 0 }}>{p.policy_number}</h3>
+                  {statusBadge(p.status)}
+                </div>
+                <div style={{ marginTop: "0.75rem", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", fontSize: "0.9rem" }}>
+                  <div>Effective: {p.effective_date}</div>
+                  <div>Expires: {p.expiration_date}</div>
+                  <div>Premium: {formatCents(p.premium_amount_cents)}</div>
+                  <div>Territory: {p.coverage_territory}</div>
+                </div>
+                {(p.status === "DRAFT" || p.status === "PENDING_PAYMENT") && (
+                  <p style={{
+                    marginTop: "0.75rem", padding: "0.5rem",
+                    backgroundColor: "#fff3cd", borderRadius: 4, fontSize: "0.85rem",
+                  }}>
+                    Payment required to activate this policy.
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </main>
+    </>
+  );
+}

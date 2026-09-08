@@ -4,7 +4,7 @@ A focused policy-administration system for Commercial General Liability insuranc
 
 ## Status
 
-Milestone 1 — domain foundation, state machines, double-entry ledger, and schema.
+Milestone 2 — auth, roles, Persona KYB, policy issuance, frontend screens.
 
 ## Structure
 
@@ -116,14 +116,20 @@ Rules:
 - Keep the subject line under 72 characters
 - Use the body for additional context when the subject line isn't enough
 
-### Seeding the chart of accounts
+### Seeding demo data
 
-After running migrations, seed the ledger accounts:
+After running migrations, seed the chart of accounts, demo users, and California tax/fee rules:
 
 ```bash
 cd backend
-uv run python manage.py seed_chart_of_accounts
+uv run python manage.py seed_demo
 ```
+
+This creates:
+- **Staff users**: staff1/staffpass1, staff2/staffpass2
+- **Customer user**: customer1/custpass1
+- **CA tax rules**: Premium Tax (2.35%), FAIR Plan Surcharge (0.10%), Stamping Fee ($25.00)
+- **Chart of accounts**: 13 ledger accounts
 
 ## Key documents
 
@@ -133,3 +139,6 @@ uv run python manage.py seed_chart_of_accounts
 - [docs/DOMAIN_MODEL.md](docs/DOMAIN_MODEL.md) — entity relationships and money representation
 - [docs/STATE_MACHINES.md](docs/STATE_MACHINES.md) — state machine diagrams for all entities
 - [docs/MONEY_FLOWS.md](docs/MONEY_FLOWS.md) — double-entry ledger and chart of accounts
+- [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) — Persona KYB and webhook integration
+- [docs/TESTING.md](docs/TESTING.md) — test suite organization and running tests
+- [docs/LIVE_FIRE.md](docs/LIVE_FIRE.md) — live-fire testing with Persona sandbox

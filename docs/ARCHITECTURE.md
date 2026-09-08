@@ -96,6 +96,42 @@ frontend/
 └── tests/            # Frontend tests
 ```
 
+## Authentication & Authorization
+
+- **Token authentication**: DRF TokenAuthentication for API access from the static Next.js frontend
+- **Roles**: STAFF (manage brokers, policies, operations) and CUSTOMER (view own policies)
+- **Permission classes**: `IsStaffUser` and `IsCustomerUser` enforce role-based access
+- **Seed users**: staff1/staffpass1, staff2/staffpass2 (Staff), customer1/custpass1 (Customer)
+
+## API Endpoints
+
+```
+POST /api/auth/login/         → token + user
+POST /api/auth/logout/        → revoke token
+GET  /api/auth/me/            → current user
+POST /api/auth/register/      → create customer
+
+GET  /api/brokers/            → list (Staff only)
+POST /api/brokers/            → create broker (Staff only)
+GET  /api/brokers/<id>/       → detail (Staff only)
+POST /api/brokers/<id>/kyb/   → initiate Persona KYB
+
+GET  /api/policies/           → list (Staff: all, Customer: own)
+POST /api/policies/           → create (Staff only, approved broker required)
+GET  /api/policies/<id>/      → detail with events
+
+POST /api/integrations/webhooks/persona/  → Persona webhook (AllowAny, signature-verified)
+```
+
+## Frontend Routes
+
+| Route | Role | Purpose |
+|-------|------|---------|
+| `/login` | All | Login form |
+| `/staff/brokers` | Staff | Broker list, create, KYB management |
+| `/staff/policies` | Staff | Policy list, create with charge breakdown |
+| `/customer/policies` | Customer | View own policies, payment-required state |
+
 ## Key Design Decisions
 
 - **Append-only ledger**: Posted journal entries and lines are never updated or deleted
@@ -103,3 +139,7 @@ frontend/
 - **Calendar anniversary**: Policy terms use same month/day next year, not +365 days
 - **Effective vs recorded dates**: Every financial record tracks both when it happened (effective_at) and when the system recorded it (recorded_at)
 - **Custom User model**: Defined from project start to avoid migration issues later
+- **Persona adapter boundary**: `integrations/persona/` module with graceful degradation (SIMULATED prefix when no credentials)
+- **Webhook idempotency**: WebhookEvent with unique idempotency_key prevents duplicate processing
+- **Out-of-order tolerance**: KYB state never regresses from APPROVED/REJECTED regardless of webhook arrival order
+- **California tax model**: CA Premium Tax (2.35%), CA FAIR Plan Surcharge (0.10%), CA Stamping Fee ($25.00 flat) — effective-dated rules

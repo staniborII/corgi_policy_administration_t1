@@ -47,11 +47,14 @@ cdk.context.json
 
 # Project management and AI tooling
 .claude/
+.cursor/
+.ai-hooks/
 CLAUDE.md
 CURSOR.md
 CUT_LIST.md
 DECISIONS.md
 project_management_docs_and_prompts/
+prompts/
 
 # Temporary
 tmp/
