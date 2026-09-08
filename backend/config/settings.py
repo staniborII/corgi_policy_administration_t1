@@ -24,6 +24,17 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "apps.accounts",
+    "apps.brokers",
+    "apps.policies",
+    "apps.endorsements",
+    "apps.ledger",
+    "apps.payments",
+    "apps.claims",
+    "apps.approvals",
+    "apps.reconciliation",
+    "apps.documents",
+    "apps.integrations",
 ]
 
 MIDDLEWARE = [
@@ -62,6 +73,8 @@ DATABASES = {
         conn_max_age=600,
     )
 }
+
+AUTH_USER_MODEL = "accounts.User"
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

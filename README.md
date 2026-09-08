@@ -4,7 +4,7 @@ A focused policy-administration system for Commercial General Liability insuranc
 
 ## Status
 
-Milestone 0 — repository bootstrap. Project skeleton only; no domain features yet.
+Milestone 1 — domain foundation, state machines, double-entry ledger, and schema.
 
 ## Structure
 
@@ -116,7 +116,20 @@ Rules:
 - Keep the subject line under 72 characters
 - Use the body for additional context when the subject line isn't enough
 
+### Seeding the chart of accounts
+
+After running migrations, seed the ledger accounts:
+
+```bash
+cd backend
+uv run python manage.py seed_chart_of_accounts
+```
+
 ## Key documents
 
 - [DECISIONS.md](DECISIONS.md) — timestamped decision log
 - [CUT_LIST.md](CUT_LIST.md) — scope deliberately excluded from v1
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — system architecture and app structure
+- [docs/DOMAIN_MODEL.md](docs/DOMAIN_MODEL.md) — entity relationships and money representation
+- [docs/STATE_MACHINES.md](docs/STATE_MACHINES.md) — state machine diagrams for all entities
+- [docs/MONEY_FLOWS.md](docs/MONEY_FLOWS.md) — double-entry ledger and chart of accounts
