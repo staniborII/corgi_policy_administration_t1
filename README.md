@@ -83,6 +83,39 @@ npm run typecheck
 npm run lint
 ```
 
+## Commit conventions
+
+This project follows [Conventional Commits](https://www.conventionalcommits.org/).
+
+Format: `<type>(<scope>): <description>`
+
+| Type | When to use |
+|---|---|
+| `feat` | New feature |
+| `fix` | Bug fix |
+| `docs` | Documentation only |
+| `refactor` | Code change that neither fixes a bug nor adds a feature |
+| `test` | Adding or updating tests |
+| `chore` | Build, config, tooling, dependencies |
+| `ci` | CI/CD changes |
+
+Scope is optional but encouraged — use the area of the codebase: `backend`, `frontend`, `infra`, `docs`.
+
+Examples:
+
+```
+feat(backend): add policy creation endpoint
+fix(frontend): correct premium display rounding
+docs: update architecture diagram for ledger
+chore(backend): upgrade Django to 5.1.16
+test(backend): add integration tests for journal entries
+```
+
+Rules:
+- Use imperative mood (`add`, not `added` or `adds`)
+- Keep the subject line under 72 characters
+- Use the body for additional context when the subject line isn't enough
+
 ## Key documents
 
 - [DECISIONS.md](DECISIONS.md) — timestamped decision log
