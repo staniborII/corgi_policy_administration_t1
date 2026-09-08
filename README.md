@@ -1,0 +1,89 @@
+# Corgi Policy Administration — Track 1
+
+A focused policy-administration system for Commercial General Liability insurance.
+
+## Status
+
+Milestone 0 — repository bootstrap. Project skeleton only; no domain features yet.
+
+## Structure
+
+- `backend/` — Django + Django REST Framework (Python, managed by uv)
+- `frontend/` — Next.js + TypeScript (static export)
+- `infra/` — AWS CDK (infrastructure, added in later milestones)
+- `docs/` — Architecture, domain model, state machines, money flows
+- `project_management_docs_and_prompts/` — PRDs, prompts, engineering standards
+
+## Local development
+
+### Prerequisites
+
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/) (Python package manager)
+- Node.js 18+ and npm
+
+### Backend (Django)
+
+```bash
+cd backend
+
+# Install dependencies
+uv sync
+
+# Create a .env file with dev defaults
+cat > .env << 'EOF'
+DJANGO_DEBUG=True
+DJANGO_SECRET_KEY=insecure-dev-key-change-in-production
+DATABASE_URL=sqlite:///db.sqlite3
+EOF
+
+# Run migrations
+uv run python manage.py migrate
+
+# Start the dev server at http://127.0.0.1:8000
+uv run python manage.py runserver
+```
+
+To use PostgreSQL instead of SQLite, set `DATABASE_URL` in `.env`:
+
+```
+DATABASE_URL=postgres://user:password@localhost:5432/corgi_dev
+```
+
+### VS Code setup
+
+After running `uv sync`, point VS Code at the project's virtual environment so Pylance can resolve imports:
+
+1. `Ctrl+Shift+P` → **Python: Select Interpreter**
+2. Click **Enter interpreter path...**
+3. Select `backend/.venv/Scripts/python.exe` (Windows) or `backend/.venv/bin/python` (macOS/Linux)
+
+### Frontend (Next.js)
+
+```bash
+cd frontend
+
+# Install dependencies
+npm install
+
+# Start the dev server at http://localhost:3000
+npm run dev
+```
+
+### Running tests
+
+```bash
+# Backend
+cd backend
+uv run pytest
+
+# Frontend
+cd frontend
+npm run typecheck
+npm run lint
+```
+
+## Key documents
+
+- [DECISIONS.md](DECISIONS.md) — timestamped decision log
+- [CUT_LIST.md](CUT_LIST.md) — scope deliberately excluded from v1
