@@ -12,6 +12,7 @@ dependencies = [
     "django-cors-headers>=4.9.0",
     "requests>=2.34.2",
     "stripe>=15.6.1",
+    "reportlab>=5.0.1",
 ]
 
 [dependency-groups]

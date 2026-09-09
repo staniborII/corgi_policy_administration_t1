@@ -113,6 +113,44 @@ export interface CheckoutResult {
   charges: Record<string, unknown>;
 }
 
+export interface EndorsementRecord {
+  id: number;
+  policy: number;
+  endorsement_number: string;
+  endorsement_type: string;
+  status: string;
+  description: string;
+  effective_date: string;
+  annual_premium_delta_cents: number;
+  premium_change_cents: number;
+  charges_snapshot: Record<string, unknown> | null;
+  correction_of: number | null;
+  created_at: string;
+  recorded_at: string;
+}
+
+export interface AsOfSnapshot {
+  policy_number: string;
+  status: string;
+  effective_date: string;
+  expiration_date: string;
+  coverage_territory: string;
+  base_premium_cents: number;
+  effective_premium_cents: number;
+  endorsements: Array<{
+    id: number;
+    endorsement_number: string;
+    type: string;
+    effective_date: string;
+    annual_premium_delta_cents: number;
+    premium_change_cents: number;
+    description: string;
+  }>;
+  as_of: string;
+  customer: string;
+  broker: string;
+}
+
 export const api = {
   login: (username: string, password: string) =>
     request<{ token: string; user: User }>("/api/auth/login/", {
@@ -178,4 +216,38 @@ export const api = {
     request<PaymentRecord>(`/api/payments/${paymentId}/simulate/`, {
       method: "POST",
     }),
+
+  listEndorsements: (policyId: number) =>
+    request<EndorsementRecord[]>(`/api/endorsements/?policy_id=${policyId}`),
+
+  createEndorsement: (data: {
+    policy_id: number;
+    endorsement_type: string;
+    effective_date: string;
+    annual_premium_delta_cents: number;
+    description: string;
+  }) =>
+    request<{ endorsement: EndorsementRecord; charges: Record<string, unknown> }>("/api/endorsements/", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  approveEndorsement: (endorsementId: number) =>
+    request<EndorsementRecord>(`/api/endorsements/${endorsementId}/approve/`, {
+      method: "POST",
+    }),
+
+  applyEndorsement: (endorsementId: number) =>
+    request<EndorsementRecord>(`/api/endorsements/${endorsementId}/apply/`, {
+      method: "POST",
+    }),
+
+  correctEndorsement: (endorsementId: number, correctedEffectiveDate: string) =>
+    request<EndorsementRecord>(`/api/endorsements/${endorsementId}/correct/`, {
+      method: "POST",
+      body: JSON.stringify({ corrected_effective_date: correctedEffectiveDate }),
+    }),
+
+  getPolicyAsOf: (policyId: number, asOf?: string) =>
+    request<AsOfSnapshot>(`/api/policies/${policyId}/as-of/${asOf ? `?as_of=${encodeURIComponent(asOf)}` : ""}`),
 };

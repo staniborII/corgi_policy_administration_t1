@@ -70,12 +70,29 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-DATABASES = {
-    "default": dj_database_url.config(
-        default="sqlite:///db.sqlite3",
-        conn_max_age=600,
-    )
-}
+DB_TYPE = os.environ.get("DB_TYPE", "sqlite")
+
+if os.environ.get("DATABASE_URL"):
+    DATABASES = {"default": dj_database_url.config(conn_max_age=600)}
+elif DB_TYPE == "postgres":
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.environ.get("DB_NAME", "corgi_dev"),
+            "USER": os.environ.get("DB_USER", "corgi_user"),
+            "PASSWORD": os.environ.get("DB_PASSWORD", "corgi_pass"),
+            "HOST": os.environ.get("DB_HOST", "localhost"),
+            "PORT": os.environ.get("DB_PORT", "5432"),
+            "CONN_MAX_AGE": 600,
+        }
+    }
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / os.environ.get("DB_NAME", "db.sqlite3"),
+        }
+    }
 
 AUTH_USER_MODEL = "accounts.User"
 

@@ -1,3 +1,5 @@
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -5,6 +7,7 @@ from rest_framework.views import APIView
 from apps.accounts.models import User
 from apps.accounts.permissions import IsStaffUser
 from apps.policies.models import FeeRule, Policy, TaxRule
+from apps.policies.selectors import get_policy_as_of
 from apps.policies.serializers import CreatePolicySerializer, PolicyDetailSerializer, PolicySerializer
 from apps.policies.services import PolicyError, issue_policy
 
@@ -72,3 +75,28 @@ class PolicyDetailView(APIView):
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
 
         return Response(PolicyDetailSerializer(policy).data)
+
+
+class PolicyAsOfView(APIView):
+    """Reconstruct policy state at a historical point in time."""
+
+    def get(self, request, pk):
+        as_of_str = request.query_params.get("as_of")
+        as_of = None
+        if as_of_str:
+            as_of = parse_datetime(as_of_str)
+            if as_of is None:
+                return Response({"detail": "Invalid as_of datetime."}, status=status.HTTP_400_BAD_REQUEST)
+            if timezone.is_naive(as_of):
+                as_of = timezone.make_aware(as_of)
+
+        try:
+            policy = Policy.objects.get(pk=pk)
+        except Policy.DoesNotExist:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if request.user.role == "CUSTOMER" and policy.customer_id != request.user.id:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        snapshot = get_policy_as_of(pk, as_of=as_of)
+        return Response(snapshot)

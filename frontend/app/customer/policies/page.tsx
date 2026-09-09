@@ -127,7 +127,11 @@ export default function CustomerPoliciesPage() {
                 marginBottom: "1rem",
               }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <h3 style={{ margin: 0 }}>{p.policy_number}</h3>
+                  <h3 style={{ margin: 0 }}>
+                    <a href={`/customer/policies/detail?id=${p.id}`} style={{ color: "#0275d8", textDecoration: "underline" }}>
+                      {p.policy_number}
+                    </a>
+                  </h3>
                   {statusBadge(p.status)}
                 </div>
                 <div style={{ marginTop: "0.75rem", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", fontSize: "0.9rem" }}>

@@ -4,7 +4,7 @@ A focused policy-administration system for Commercial General Liability insuranc
 
 ## Status
 
-Milestone 3 — Stripe premium collection, payment flow, ledger posting, commission.
+Milestone 4 — Endorsements, corrections, as-of reconstruction, PDF documents.
 
 ## Structure
 
@@ -30,33 +30,21 @@ cd backend
 # Install dependencies
 uv sync
 
-# Create a .env file with dev defaults
-cat > .env << 'EOF'
-DJANGO_DEBUG=True
-DJANGO_SECRET_KEY=insecure-dev-key-change-in-production
-DATABASE_URL=sqlite:///db.sqlite3
-EOF
+# Copy the example env file and adjust as needed
+cp .env.example .env
 
 # Run migrations
 uv run python manage.py migrate
 
+# Seed demo data (users, chart of accounts, TX tax rules)
+uv run python manage.py seed_demo
+
+# Create a superuser (reads DJANGO_SUPERUSER_USERNAME/PASSWORD from .env)
+uv run python manage.py ensure_superuser
+
 # Start the dev server at http://127.0.0.1:8000
 uv run python manage.py runserver
 ```
-
-To use PostgreSQL instead of SQLite, set `DATABASE_URL` in `.env`:
-
-```
-DATABASE_URL=postgres://user:password@localhost:5432/corgi_dev
-```
-
-### VS Code setup
-
-After running `uv sync`, point VS Code at the project's virtual environment so Pylance can resolve imports:
-
-1. `Ctrl+Shift+P` → **Python: Select Interpreter**
-2. Click **Enter interpreter path...**
-3. Select `backend/.venv/Scripts/python.exe` (Windows) or `backend/.venv/bin/python` (macOS/Linux)
 
 ### Frontend (Next.js)
 
@@ -66,9 +54,64 @@ cd frontend
 # Install dependencies
 npm install
 
+# Copy the example env file
+cp .env.example .env.local
+
 # Start the dev server at http://localhost:3000
 npm run dev
 ```
+
+### Environment files
+
+Each project has its own `.env.example` with dummy values and comments:
+
+- `backend/.env.example` — Django settings, database, Stripe, Persona, superuser
+- `frontend/.env.example` — API URL
+
+Copy them to `.env` (backend) or `.env.local` (frontend) before running.
+
+### Database: SQLite vs PostgreSQL
+
+The `DB_TYPE` env var controls which database backend Django uses. Set it in `backend/.env`:
+
+```bash
+# SQLite (default — no setup required for local dev)
+DB_TYPE=sqlite
+DB_NAME=db.sqlite3
+
+# PostgreSQL (for integration testing and production)
+DB_TYPE=postgres
+DB_NAME=corgi_dev
+DB_USER=corgi_user
+DB_PASSWORD=corgi_pass
+DB_HOST=localhost
+DB_PORT=5432
+```
+
+Alternatively, setting `DATABASE_URL` overrides `DB_TYPE` and all `DB_*` vars:
+
+```bash
+DATABASE_URL=postgres://corgi_user:corgi_pass@localhost:5432/corgi_dev
+```
+
+The `ensure_superuser` management command prints which database it's connected to, so you can verify:
+
+```
+$ uv run python manage.py ensure_superuser
+Database: SQLite (db.sqlite3)                          # ← when DB_TYPE=sqlite
+Database: PostgreSQL (corgi_dev@localhost:5432)         # ← when DB_TYPE=postgres
+Connection verified: postgresql
+```
+
+Both databases use the same Django ORM — no code changes needed when switching.
+
+### VS Code setup
+
+After running `uv sync`, point VS Code at the project's virtual environment so Pylance can resolve imports:
+
+1. `Ctrl+Shift+P` → **Python: Select Interpreter**
+2. Click **Enter interpreter path...**
+3. Select `backend/.venv/Scripts/python.exe` (Windows) or `backend/.venv/bin/python` (macOS/Linux)
 
 ### Running tests
 

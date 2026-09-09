@@ -49,9 +49,15 @@ CGL insurance policy with calendar-anniversary terms.
 Append-only history of policy state changes with separate `effective_at` and `recorded_at` timestamps.
 
 ### Endorsement
-Mid-term policy modification.
-- `status`: DRAFT → PENDING_CUSTOMER_APPROVAL → APPROVED → PENDING_PAYMENT → APPLIED | REVERSED
-- `premium_change_cents`: Signed integer (positive = additional premium)
+Mid-term policy modification with pro-rata pricing.
+- `endorsement_type`: COVERAGE_LIMIT_CHANGE | ADDRESS_CORRECTION
+- `status`: PENDING_CUSTOMER_APPROVAL | PENDING_PAYMENT | APPROVED → APPLIED | REVERSED
+- `annual_premium_delta_cents`: Annual premium change before pro-rating
+- `premium_change_cents`: Pro-rated amount for remaining term (signed integer)
+- `charges_snapshot`: JSON snapshot of computed charges (premium, tax, fees)
+- `correction_of`: FK to original endorsement (for corrections)
+- **Threshold**: > $500 total requires customer approval
+- **Pro-rata**: `(annual_delta × remaining_days) / total_days` using Decimal ROUND_HALF_UP
 
 ### Payment / Refund
 Payment tracks Stripe payment intents. Refund tracks Stripe refunds linked to a payment.

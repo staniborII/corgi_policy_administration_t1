@@ -125,6 +125,18 @@ POST /api/payments/checkout/              → create Stripe Checkout Session
 GET  /api/payments/policy/<id>/           → list payments for policy
 POST /api/payments/<id>/simulate/         → simulate payment (dev mode only)
 
+GET  /api/policies/<id>/as-of/             → historical policy state (?as_of=datetime)
+
+GET  /api/endorsements/?policy_id=<id>     → list endorsements
+POST /api/endorsements/                    → create endorsement (Staff only)
+GET  /api/endorsements/<id>/               → endorsement detail
+POST /api/endorsements/<id>/approve/       → customer approval
+POST /api/endorsements/<id>/apply/         → apply endorsement (Staff only)
+POST /api/endorsements/<id>/correct/       → correct endorsement (Staff only)
+
+GET  /api/documents/policy/<id>/declarations/           → declarations PDF (?as_of=)
+GET  /api/documents/policy/<id>/endorsement-schedule/   → endorsement schedule PDF (?as_of=)
+
 POST /api/integrations/webhooks/persona/  → Persona webhook (AllowAny, signature-verified)
 POST /api/integrations/webhooks/stripe/   → Stripe webhook (AllowAny, signature-verified)
 ```
@@ -140,6 +152,8 @@ POST /api/integrations/webhooks/stripe/   → Stripe webhook (AllowAny, signatur
 | `/customer/policies` | Customer | View own policies, pay button, payment history |
 | `/customer/payment-success` | Customer | Stripe checkout success redirect |
 | `/customer/payment-cancel` | Customer | Stripe checkout cancel redirect |
+| `/staff/policies/detail?id=X` | Staff | Policy detail, endorsements, corrections, as-of, PDFs |
+| `/customer/policies/detail?id=X` | Customer | Policy detail, endorsement approval, as-of, PDFs |
 
 ## Key Design Decisions
 
@@ -155,3 +169,8 @@ POST /api/integrations/webhooks/stripe/   → Stripe webhook (AllowAny, signatur
 - **Stripe Checkout flow**: DRAFT → create Checkout Session → PENDING_PAYMENT → webhook confirms → post ledger → ACTIVE
 - **Stripe adapter boundary**: `integrations/stripe/` module with SIMULATED mode when no credentials
 - **Commission on collected premium**: Broker commission posted at payment time, earned on premium only
+- **Pro-rata endorsements**: `(annual_delta * remaining_days) / total_days_in_term` using Decimal with ROUND_HALF_UP
+- **Endorsement threshold**: > $500 total requires customer approval before collection
+- **Correction = reversal + re-book**: Original entries reversed, corrected endorsement created, no mutation of posted entries
+- **As-of reconstruction**: Reconstructs policy state at any historical point from base premium + applied endorsements filtered by recorded_at
+- **PDF generation**: reportlab for declarations pages and endorsement schedules, supports as-of parameter

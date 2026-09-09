@@ -216,8 +216,8 @@ export default function StaffPoliciesPage() {
             </thead>
             <tbody>
               {policies.map((p) => (
-                <tr key={p.id} style={{ borderBottom: "1px solid #eee" }}>
-                  <td style={{ padding: "0.5rem" }}>{p.policy_number}</td>
+                <tr key={p.id} style={{ borderBottom: "1px solid #eee", cursor: "pointer" }} onClick={() => router.push(`/staff/policies/detail?id=${p.id}`)}>
+                  <td style={{ padding: "0.5rem", color: "#0275d8", textDecoration: "underline" }}>{p.policy_number}</td>
                   <td style={{ padding: "0.5rem" }}>{statusBadge(p.status)}</td>
                   <td style={{ padding: "0.5rem" }}>{p.effective_date}</td>
                   <td style={{ padding: "0.5rem" }}>{p.expiration_date}</td>

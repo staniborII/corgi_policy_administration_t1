@@ -30,14 +30,22 @@ Policy status represents the lifecycle of the policy itself. Payment and refund 
 
 ```mermaid
 stateDiagram-v2
-    [*] --> DRAFT
-    DRAFT --> PENDING_CUSTOMER_APPROVAL : submitted
-    PENDING_CUSTOMER_APPROVAL --> APPROVED : customer accepts
-    APPROVED --> PENDING_PAYMENT : additional premium
-    APPROVED --> APPLIED : no premium change
-    PENDING_PAYMENT --> APPLIED : payment succeeded
-    APPLIED --> REVERSED : correction needed
+    [*] --> PENDING_CUSTOMER_APPROVAL : total > $500 threshold
+    [*] --> PENDING_PAYMENT : total > $0, within threshold
+    [*] --> APPROVED : total ≤ $0 or address correction
+    PENDING_CUSTOMER_APPROVAL --> PENDING_PAYMENT : customer approves (additional premium due)
+    PENDING_CUSTOMER_APPROVAL --> APPROVED : customer approves (no additional premium)
+    PENDING_PAYMENT --> APPLIED : apply_endorsement
+    APPROVED --> APPLIED : apply_endorsement
+    APPLIED --> REVERSED : correction (reversal + re-book)
 ```
+
+Endorsements skip DRAFT — they enter the state machine at creation based on the pro-rated charge amount and type:
+
+- **Address corrections**: Always APPROVED (no premium change, `annual_premium_delta_cents` forced to 0)
+- **Coverage limit changes**: PENDING_CUSTOMER_APPROVAL if total > $500 threshold, PENDING_PAYMENT if positive charge within threshold, APPROVED if zero or negative
+
+Corrections always apply the corrected endorsement immediately since the original was already applied and paid.
 
 ## Claim Status
 

@@ -102,3 +102,47 @@ Tax and fee rules are effective-dated per jurisdiction. Rule selection uses the 
 Sources: Texas Comptroller Rule 3.820, SLTX.
 
 All rate calculations use `Decimal` arithmetic with `ROUND_HALF_UP` rounding. Rates stored as integer basis points. `calculate_rate_amount(amount_cents, rate_bps)` computes `(amount_cents × rate_bps) / 10000`.
+
+## Endorsement Financial Flows
+
+### Pro-Rata Calculation
+
+Mid-term endorsements are priced from their effective date through the policy term end:
+
+```
+prorated_amount = (annual_delta × remaining_days) / total_days_in_term
+```
+
+- `remaining_days` = `policy.expiration_date − endorsement.effective_date`
+- `total_days_in_term` = `policy.expiration_date − policy.effective_date` (366 for leap years)
+- Calculation uses `Decimal` with `ROUND_HALF_UP`
+- Tax and fee adjustments are similarly pro-rated using inception-date rates
+
+### Endorsement Premium Increase
+
+Journal entry (e.g., +$300 annual → $150 pro-rated, TX tax $7.28, stamping $0.01):
+| Line | Account | Debit | Credit |
+|------|---------|-------|--------|
+| 1 | 1010 Stripe Clearing | 15,729 | |
+| 2 | 2000 Unearned Premium | | 15,000 |
+| 3 | 2100 State Premium Tax Payable | | 728 |
+| 4 | 2150 Stamping Fee Payable | | 1 |
+
+Commission on additional premium (15% on $150):
+| Line | Account | Debit | Credit |
+|------|---------|-------|--------|
+| 1 | 5100 Commission Expense | 2,250 | |
+| 2 | 2200 Broker Commission Payable | | 2,250 |
+
+### Endorsement Correction (Reversal + Re-book)
+
+When an endorsement is corrected (e.g., wrong effective date):
+
+1. **Reversal entry**: Mirrors the original endorsement journal entry with flipped DR/CR
+2. **Commission reversal**: Mirrors the original commission entry with flipped DR/CR
+3. **Policy premium reverted**: `policy.premium_amount_cents -= original.annual_premium_delta_cents`
+4. **Original marked REVERSED** (status only, no row mutation on journal entries)
+5. **New endorsement created** with corrected effective date → pro-rated at new remaining days
+6. **New endorsement applied** with new journal entries and commission
+
+All original entries remain visible for audit. The correction is linked via `correction_of` foreign key.
