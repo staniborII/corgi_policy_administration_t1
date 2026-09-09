@@ -1,3 +1,5 @@
+import logging
+
 from django.db import models, transaction
 from django.utils import timezone
 
@@ -5,6 +7,8 @@ from apps.claims.models import Claim, ClaimPayment, PayoutDestination, ReserveEv
 from apps.ledger.models import JournalLine
 from apps.ledger.services import post_journal_entry
 from apps.policies.models import Policy
+
+logger = logging.getLogger(__name__)
 
 APPROVAL_THRESHOLD_CENTS = 500_000
 
@@ -40,6 +44,7 @@ def submit_claim(*, policy_id, date_of_loss, description, estimated_amount_cents
         estimated_amount_cents=estimated_amount_cents,
         created_by=user,
     )
+    logger.info(f"Claim created: claim_id={claim.id}, policy_id={policy_id}")
     return claim
 
 
@@ -85,6 +90,8 @@ def set_reserve(*, claim_id, amount_cents, reserve_type, memo="", user=None):
             memo=f"Reserve {reserve_type} for {claim.claim_number}: -{release_amount}¢",
             idempotency_key=f"reserve-{event.id}",
         )
+
+    logger.info(f"Reserve event added: claim_id={claim_id}, type={reserve_type}, amount={amount_cents}")
 
     if claim.status == Claim.Status.OPEN:
         claim.status = Claim.Status.RESERVED
@@ -159,6 +166,15 @@ def create_claim_payment(*, claim_id, amount_cents, payee, user=None):
 
         create_approval(content_object=payment, action="CLAIM_PAYMENT", requested_by=user)
 
+    approval_status = "pending_approval" if needs_approval else "auto_approved"
+    logger.info(
+        "Claim payment created: payment_id=%s, claim_id=%s, amount=%s, status=%s",
+        payment.id,
+        claim_id,
+        amount_cents,
+        approval_status,
+    )
+
     if claim.status in (Claim.Status.OPEN, Claim.Status.RESERVED):
         claim.status = Claim.Status.PAYMENT_PENDING
         claim.save(update_fields=["status", "updated_at"])
@@ -183,6 +199,8 @@ def approve_claim_payment(*, payment_id, user):
     payment.status = ClaimPayment.Status.APPROVED
     payment.approved_by = user
     payment.save(update_fields=["status", "approved_by", "updated_at"])
+
+    logger.info(f"Claim payment approved: payment_id={payment_id}, approved_by={user.id}")
 
     return payment
 
@@ -212,6 +230,8 @@ def execute_payout(*, payment_id, user=None):
     payment.payout_reference = payout_ref
     payment.save(update_fields=["status", "payout_reference", "updated_at"])
 
+    logger.info(f"Payout executed: payment_id={payment_id}, provider_reference={payout_ref}")
+
     return payment
 
 
@@ -238,6 +258,8 @@ def handle_payout_settled(*, payout_reference, amount_cents):
 
     payment.status = ClaimPayment.Status.SETTLED
     payment.save(update_fields=["status", "updated_at"])
+
+    logger.info(f"Payout settled: payment_id={payment.id}, provider_reference={payout_reference}")
 
     _update_claim_status_after_payment(payment.claim)
 
@@ -278,6 +300,8 @@ def handle_payout_returned(*, payout_reference, reason=""):
 
     payment.status = ClaimPayment.Status.RETURNED
     payment.save(update_fields=["status", "updated_at"])
+
+    logger.warning(f"Payout returned: payment_id={payment.id}, provider_reference={payout_reference}, reason={reason}")
 
     _update_claim_status_after_payment(payment.claim)
 

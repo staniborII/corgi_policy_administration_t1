@@ -14,7 +14,7 @@ Tests cover:
 - Bank-verification simulator states are clearly labelled SIMULATED
 """
 
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 
@@ -42,6 +42,11 @@ from apps.ledger.services import get_account_balance
 from apps.payments.services import create_checkout_for_policy, handle_payment_success
 from apps.policies.models import FeeRule, Policy, TaxRule
 from apps.policies.services import issue_policy
+
+_POLICY_START = date.today() + timedelta(days=30)
+_IN_TERM = _POLICY_START + timedelta(days=90)
+_IN_TERM_2 = _POLICY_START + timedelta(days=75)
+_BEFORE_TERM = _POLICY_START - timedelta(days=365)
 
 
 @pytest.fixture
@@ -117,7 +122,7 @@ def active_policy(staff_user, customer_user, approved_broker, tx_rules, ledger_a
     policy, _ = issue_policy(
         customer=customer_user,
         broker_id=approved_broker.id,
-        effective_date=date(2025, 6, 1),
+        effective_date=_POLICY_START,
         premium_amount_cents=100000,
         coverage_territory="TX",
         created_by=staff_user,
@@ -132,7 +137,7 @@ def active_policy(staff_user, customer_user, approved_broker, tx_rules, ledger_a
 def open_claim(active_policy, customer_user):
     return submit_claim(
         policy_id=active_policy.id,
-        date_of_loss=date(2025, 9, 1),
+        date_of_loss=_IN_TERM,
         description="Water damage to warehouse",
         estimated_amount_cents=500000,
         user=customer_user,
@@ -156,7 +161,7 @@ class TestClaimSubmission:
     def test_submit_claim_on_active_policy(self, active_policy, customer_user):
         claim = submit_claim(
             policy_id=active_policy.id,
-            date_of_loss=date(2025, 9, 1),
+            date_of_loss=_IN_TERM,
             description="Slip and fall",
             user=customer_user,
         )
@@ -168,7 +173,7 @@ class TestClaimSubmission:
         with pytest.raises(ClaimError, match="within policy coverage dates"):
             submit_claim(
                 policy_id=active_policy.id,
-                date_of_loss=date(2024, 1, 1),
+                date_of_loss=_BEFORE_TERM,
                 description="Before coverage",
                 user=customer_user,
             )
@@ -176,7 +181,7 @@ class TestClaimSubmission:
     def test_pre_cancellation_claim_remains_valid(self, active_policy, customer_user, staff_user):
         claim = submit_claim(
             policy_id=active_policy.id,
-            date_of_loss=date(2025, 9, 1),
+            date_of_loss=_IN_TERM,
             description="Incident during active period",
             user=customer_user,
         )
@@ -189,7 +194,7 @@ class TestClaimSubmission:
 
         claim2 = submit_claim(
             policy_id=active_policy.id,
-            date_of_loss=date(2025, 8, 15),
+            date_of_loss=_IN_TERM_2,
             description="Another incident during active period",
             user=customer_user,
         )

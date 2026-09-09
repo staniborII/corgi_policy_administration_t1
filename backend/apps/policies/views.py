@@ -10,7 +10,7 @@ from apps.payments.serializers import CancelPolicySerializer, RefundSerializer
 from apps.policies.models import FeeRule, Policy, TaxRule
 from apps.policies.selectors import get_policy_as_of
 from apps.policies.serializers import CreatePolicySerializer, PolicyDetailSerializer, PolicySerializer
-from apps.policies.services import PolicyError, cancel_policy, issue_policy
+from apps.policies.services import PolicyError, cancel_policy, decline_policy, issue_policy
 
 
 class PolicyListView(APIView):
@@ -133,3 +133,15 @@ class CancelPolicyView(APIView):
             response_data["refund"] = RefundSerializer(result["refund"]).data
 
         return Response(response_data)
+
+
+class DeclinePolicyView(APIView):
+    def post(self, request, pk):
+        try:
+            policy = decline_policy(policy_id=pk, declined_by=request.user)
+        except Policy.DoesNotExist:
+            return Response({"detail": "Policy not found."}, status=status.HTTP_404_NOT_FOUND)
+        except PolicyError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(PolicySerializer(policy).data)

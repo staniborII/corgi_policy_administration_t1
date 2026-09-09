@@ -14,7 +14,7 @@ Tests cover:
 - PDF generation from as-of state
 """
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
@@ -37,6 +37,18 @@ from apps.payments.services import create_checkout_for_policy, handle_payment_su
 from apps.policies.models import FeeRule, TaxRule
 from apps.policies.selectors import get_policy_as_of
 from apps.policies.services import issue_policy
+
+_POLICY_START = date.today() + timedelta(days=30)
+_3MO_IN = _POLICY_START + timedelta(days=91)
+_6MO_IN = _POLICY_START + timedelta(days=183)
+_OUTSIDE_TERM = _POLICY_START + timedelta(days=730)
+
+
+def _future_leap_year():
+    y = date.today().year + 1
+    while not (y % 4 == 0 and (y % 100 != 0 or y % 400 == 0)):
+        y += 1
+    return y
 
 
 @pytest.fixture
@@ -108,7 +120,7 @@ def active_policy(staff_user, customer_user, approved_broker, tx_rules, ledger_a
     policy, _ = issue_policy(
         customer=customer_user,
         broker_id=approved_broker.id,
-        effective_date=date(2025, 6, 1),
+        effective_date=_POLICY_START,
         premium_amount_cents=100000,
         coverage_territory="TX",
         created_by=staff_user,
@@ -148,7 +160,7 @@ class TestEndorsementCreation:
         end, charges = create_endorsement(
             policy_id=active_policy.id,
             endorsement_type=Endorsement.EndorsementType.COVERAGE_LIMIT_CHANGE,
-            effective_date=date(2025, 12, 1),
+            effective_date=_6MO_IN,
             annual_premium_delta_cents=20000,
             description="Increase coverage limit",
             created_by=staff_user,
@@ -158,14 +170,14 @@ class TestEndorsementCreation:
         assert end.annual_premium_delta_cents == 20000
         assert charges["premium_change_cents"] > 0
         assert charges["total_tax_cents"] > 0
-        assert charges["remaining_days"] == (active_policy.expiration_date - date(2025, 12, 1)).days
+        assert charges["remaining_days"] == (active_policy.expiration_date - _6MO_IN).days
 
     def test_large_increase_requires_customer_approval(self, active_policy, staff_user):
         """$20,000 annual increase -> above $500 threshold -> PENDING_CUSTOMER_APPROVAL."""
         end, charges = create_endorsement(
             policy_id=active_policy.id,
             endorsement_type=Endorsement.EndorsementType.COVERAGE_LIMIT_CHANGE,
-            effective_date=date(2025, 12, 1),
+            effective_date=_6MO_IN,
             annual_premium_delta_cents=2000000,
             description="Major coverage increase",
             created_by=staff_user,
@@ -177,7 +189,7 @@ class TestEndorsementCreation:
         end, charges = create_endorsement(
             policy_id=active_policy.id,
             endorsement_type=Endorsement.EndorsementType.ADDRESS_CORRECTION,
-            effective_date=date(2025, 9, 1),
+            effective_date=_3MO_IN,
             annual_premium_delta_cents=50000,
             description="Correct insured address",
             created_by=staff_user,
@@ -191,7 +203,7 @@ class TestEndorsementCreation:
         policy, _ = issue_policy(
             customer=customer_user,
             broker_id=approved_broker.id,
-            effective_date=date(2025, 6, 1),
+            effective_date=_POLICY_START,
             premium_amount_cents=100000,
             coverage_territory="TX",
             created_by=staff_user,
@@ -201,7 +213,7 @@ class TestEndorsementCreation:
             create_endorsement(
                 policy_id=policy.id,
                 endorsement_type=Endorsement.EndorsementType.COVERAGE_LIMIT_CHANGE,
-                effective_date=date(2025, 9, 1),
+                effective_date=_3MO_IN,
                 annual_premium_delta_cents=10000,
                 description="test",
                 created_by=staff_user,
@@ -212,7 +224,7 @@ class TestEndorsementCreation:
             create_endorsement(
                 policy_id=active_policy.id,
                 endorsement_type=Endorsement.EndorsementType.COVERAGE_LIMIT_CHANGE,
-                effective_date=date(2027, 1, 1),
+                effective_date=_OUTSIDE_TERM,
                 annual_premium_delta_cents=10000,
                 description="test",
                 created_by=staff_user,
@@ -224,7 +236,7 @@ class TestEndorsementApproval:
         end, _ = create_endorsement(
             policy_id=active_policy.id,
             endorsement_type=Endorsement.EndorsementType.COVERAGE_LIMIT_CHANGE,
-            effective_date=date(2025, 12, 1),
+            effective_date=_6MO_IN,
             annual_premium_delta_cents=2000000,
             description="Needs approval",
             created_by=staff_user,
@@ -239,7 +251,7 @@ class TestApplyEndorsement:
         end, charges = create_endorsement(
             policy_id=active_policy.id,
             endorsement_type=Endorsement.EndorsementType.COVERAGE_LIMIT_CHANGE,
-            effective_date=date(2025, 12, 1),
+            effective_date=_6MO_IN,
             annual_premium_delta_cents=60000,
             description="Increase",
             created_by=staff_user,
@@ -260,7 +272,7 @@ class TestApplyEndorsement:
         end, _ = create_endorsement(
             policy_id=active_policy.id,
             endorsement_type=Endorsement.EndorsementType.COVERAGE_LIMIT_CHANGE,
-            effective_date=date(2025, 12, 1),
+            effective_date=_6MO_IN,
             annual_premium_delta_cents=60000,
             description="Increase",
             created_by=staff_user,
@@ -274,7 +286,7 @@ class TestApplyEndorsement:
         end, _ = create_endorsement(
             policy_id=active_policy.id,
             endorsement_type=Endorsement.EndorsementType.COVERAGE_LIMIT_CHANGE,
-            effective_date=date(2025, 12, 1),
+            effective_date=_6MO_IN,
             annual_premium_delta_cents=60000,
             description="Increase",
             created_by=staff_user,
@@ -290,7 +302,7 @@ class TestApplyEndorsement:
         end, charges = create_endorsement(
             policy_id=active_policy.id,
             endorsement_type=Endorsement.EndorsementType.COVERAGE_LIMIT_CHANGE,
-            effective_date=date(2025, 12, 1),
+            effective_date=_6MO_IN,
             annual_premium_delta_cents=100000,
             description="Increase",
             created_by=staff_user,
@@ -307,7 +319,7 @@ class TestCorrection:
         end, _ = create_endorsement(
             policy_id=active_policy.id,
             endorsement_type=Endorsement.EndorsementType.COVERAGE_LIMIT_CHANGE,
-            effective_date=date(2025, 12, 1),
+            effective_date=_6MO_IN,
             annual_premium_delta_cents=60000,
             description="Original",
             created_by=staff_user,
@@ -316,7 +328,7 @@ class TestCorrection:
 
         corrected = correct_endorsement(
             endorsement_id=end.id,
-            corrected_effective_date=date(2025, 9, 1),
+            corrected_effective_date=_3MO_IN,
             created_by=staff_user,
         )
 
@@ -329,7 +341,7 @@ class TestCorrection:
         end, _ = create_endorsement(
             policy_id=active_policy.id,
             endorsement_type=Endorsement.EndorsementType.COVERAGE_LIMIT_CHANGE,
-            effective_date=date(2025, 12, 1),
+            effective_date=_6MO_IN,
             annual_premium_delta_cents=60000,
             description="Original",
             created_by=staff_user,
@@ -341,7 +353,7 @@ class TestCorrection:
 
         correct_endorsement(
             endorsement_id=end.id,
-            corrected_effective_date=date(2025, 9, 1),
+            corrected_effective_date=_3MO_IN,
             created_by=staff_user,
         )
 
@@ -353,7 +365,7 @@ class TestCorrection:
         end, _ = create_endorsement(
             policy_id=active_policy.id,
             endorsement_type=Endorsement.EndorsementType.COVERAGE_LIMIT_CHANGE,
-            effective_date=date(2025, 12, 1),
+            effective_date=_6MO_IN,
             annual_premium_delta_cents=60000,
             description="Original",
             created_by=staff_user,
@@ -361,7 +373,7 @@ class TestCorrection:
         apply_endorsement(endorsement_id=end.id)
         correct_endorsement(
             endorsement_id=end.id,
-            corrected_effective_date=date(2025, 9, 1),
+            corrected_effective_date=_3MO_IN,
             created_by=staff_user,
         )
 
@@ -372,7 +384,7 @@ class TestCorrection:
         end, charges1 = create_endorsement(
             policy_id=active_policy.id,
             endorsement_type=Endorsement.EndorsementType.COVERAGE_LIMIT_CHANGE,
-            effective_date=date(2025, 12, 1),
+            effective_date=_6MO_IN,
             annual_premium_delta_cents=60000,
             description="Original",
             created_by=staff_user,
@@ -381,7 +393,7 @@ class TestCorrection:
 
         corrected = correct_endorsement(
             endorsement_id=end.id,
-            corrected_effective_date=date(2025, 9, 1),
+            corrected_effective_date=_3MO_IN,
             created_by=staff_user,
         )
 
@@ -393,11 +405,15 @@ class TestLeapYear:
     def test_leap_year_policy_term_366_days(
         self, staff_user, customer_user, approved_broker, tx_rules, ledger_accounts
     ):
-        """Policy from 2024-01-01 to 2025-01-01 = 366 days (includes Feb 29)."""
+        """Policy starting Jan 1 of a leap year has 366-day term."""
+        leap_year = _future_leap_year()
+        leap_start = date(leap_year, 1, 1)
+        leap_mid = date(leap_year, 7, 1)
+
         policy, _ = issue_policy(
             customer=customer_user,
             broker_id=approved_broker.id,
-            effective_date=date(2024, 1, 1),
+            effective_date=leap_start,
             premium_amount_cents=100000,
             coverage_territory="TX",
             created_by=staff_user,
@@ -412,13 +428,13 @@ class TestLeapYear:
         end, charges = create_endorsement(
             policy_id=policy.id,
             endorsement_type=Endorsement.EndorsementType.COVERAGE_LIMIT_CHANGE,
-            effective_date=date(2024, 7, 1),
+            effective_date=leap_mid,
             annual_premium_delta_cents=36600,
             description="Leap year test",
             created_by=staff_user,
         )
 
-        remaining = (policy.expiration_date - date(2024, 7, 1)).days
+        remaining = (policy.expiration_date - leap_mid).days
         expected = prorate_amount(36600, remaining, 366)
         assert charges["premium_change_cents"] == expected
 
@@ -432,7 +448,7 @@ class TestAsOfReconstruction:
         end, _ = create_endorsement(
             policy_id=active_policy.id,
             endorsement_type=Endorsement.EndorsementType.COVERAGE_LIMIT_CHANGE,
-            effective_date=date(2025, 12, 1),
+            effective_date=_6MO_IN,
             annual_premium_delta_cents=60000,
             description="Later endorsement",
             created_by=staff_user,
@@ -447,7 +463,7 @@ class TestAsOfReconstruction:
         end, _ = create_endorsement(
             policy_id=active_policy.id,
             endorsement_type=Endorsement.EndorsementType.COVERAGE_LIMIT_CHANGE,
-            effective_date=date(2025, 12, 1),
+            effective_date=_6MO_IN,
             annual_premium_delta_cents=60000,
             description="Applied endorsement",
             created_by=staff_user,
@@ -464,7 +480,7 @@ class TestAsOfReconstruction:
         end1, _ = create_endorsement(
             policy_id=active_policy.id,
             endorsement_type=Endorsement.EndorsementType.COVERAGE_LIMIT_CHANGE,
-            effective_date=date(2025, 9, 1),
+            effective_date=_3MO_IN,
             annual_premium_delta_cents=30000,
             description="First endorsement",
             created_by=staff_user,
@@ -476,7 +492,7 @@ class TestAsOfReconstruction:
         end2, _ = create_endorsement(
             policy_id=active_policy.id,
             endorsement_type=Endorsement.EndorsementType.COVERAGE_LIMIT_CHANGE,
-            effective_date=date(2025, 12, 1),
+            effective_date=_6MO_IN,
             annual_premium_delta_cents=20000,
             description="Second endorsement",
             created_by=staff_user,
@@ -504,7 +520,7 @@ class TestPdfGeneration:
         end, _ = create_endorsement(
             policy_id=active_policy.id,
             endorsement_type=Endorsement.EndorsementType.COVERAGE_LIMIT_CHANGE,
-            effective_date=date(2025, 12, 1),
+            effective_date=_6MO_IN,
             annual_premium_delta_cents=60000,
             description="Test endorsement for PDF",
             created_by=staff_user,
@@ -528,7 +544,7 @@ class TestEndorsementAPI:
             {
                 "policy_id": active_policy.id,
                 "endorsement_type": "COVERAGE_LIMIT_CHANGE",
-                "effective_date": "2025-12-01",
+                "effective_date": _6MO_IN.isoformat(),
                 "annual_premium_delta_cents": 20000,
                 "description": "API test",
             },
@@ -543,7 +559,7 @@ class TestEndorsementAPI:
         create_endorsement(
             policy_id=active_policy.id,
             endorsement_type=Endorsement.EndorsementType.COVERAGE_LIMIT_CHANGE,
-            effective_date=date(2025, 12, 1),
+            effective_date=_6MO_IN,
             annual_premium_delta_cents=20000,
             description="Test",
             created_by=staff_user,
@@ -557,7 +573,7 @@ class TestEndorsementAPI:
         end, _ = create_endorsement(
             policy_id=active_policy.id,
             endorsement_type=Endorsement.EndorsementType.COVERAGE_LIMIT_CHANGE,
-            effective_date=date(2025, 12, 1),
+            effective_date=_6MO_IN,
             annual_premium_delta_cents=2000000,
             description="Needs approval",
             created_by=staff_user,
@@ -571,7 +587,7 @@ class TestEndorsementAPI:
         end, _ = create_endorsement(
             policy_id=active_policy.id,
             endorsement_type=Endorsement.EndorsementType.COVERAGE_LIMIT_CHANGE,
-            effective_date=date(2025, 12, 1),
+            effective_date=_6MO_IN,
             annual_premium_delta_cents=60000,
             description="Original",
             created_by=staff_user,
@@ -581,7 +597,7 @@ class TestEndorsementAPI:
         api.force_authenticate(user=staff_user)
         resp = api.post(
             f"/api/endorsements/{end.id}/correct/",
-            {"corrected_effective_date": "2025-09-01"},
+            {"corrected_effective_date": _3MO_IN.isoformat()},
             format="json",
         )
         assert resp.status_code == 201

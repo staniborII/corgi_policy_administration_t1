@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import {
@@ -12,35 +12,21 @@ import {
   type ReserveEventRecord,
 } from "@/lib/api";
 import Nav from "@/components/Nav";
-
-function formatCents(cents: number) {
-  return `$${(cents / 100).toFixed(2)}`;
-}
-
-function badge(s: string, colors: Record<string, string>) {
-  return (
-    <span style={{
-      padding: "2px 8px", borderRadius: 4, fontSize: "0.8rem",
-      backgroundColor: colors[s] || "#999", color: "#fff",
-    }}>
-      {s.replace(/_/g, " ")}
-    </span>
-  );
-}
-
-const claimColors: Record<string, string> = {
-  OPEN: "#0275d8", UNDER_REVIEW: "#f0ad4e", RESERVED: "#5bc0de",
-  PAYMENT_PENDING: "#f0ad4e", PARTIALLY_PAID: "#0275d8", PAID: "#5cb85c", CLOSED: "#999",
-};
-
-const paymentColors: Record<string, string> = {
-  DRAFT: "#999", PENDING_APPROVAL: "#f0ad4e", APPROVED: "#5cb85c",
-  PENDING: "#0275d8", SETTLED: "#5cb85c", RETURNED: "#d9534f", FAILED: "#d9534f",
-};
-
-const verifyColors: Record<string, string> = {
-  PENDING: "#f0ad4e", VERIFIED: "#5cb85c", FAILED: "#d9534f",
-};
+import { formatCents } from "@/lib/format";
+import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 function ClaimDetailContent() {
   const { user, loading } = useAuth();
@@ -54,7 +40,6 @@ function ClaimDetailContent() {
   const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState("");
   const [actionLoading, setActionLoading] = useState("");
-  const fetched = useRef(false);
 
   // Reserve form
   const [reserveAmount, setReserveAmount] = useState("");
@@ -93,8 +78,7 @@ function ClaimDetailContent() {
   }, [claimId]);
 
   useEffect(() => {
-    if (loading || !user || fetched.current || !claimId) return;
-    fetched.current = true;
+    if (loading || !user || !claimId) return;
     reload();
   }, [loading, user, claimId, reload]);
 
@@ -230,25 +214,32 @@ function ClaimDetailContent() {
   }
 
   if (loading || !user) return null;
-  if (loadingData) return <><Nav /><main style={{ padding: "1.5rem" }}><p>Loading...</p></main></>;
-  if (!detail) return <><Nav /><main style={{ padding: "1.5rem" }}><p>Claim not found.</p></main></>;
+  if (loadingData) return <><Nav /><main className="mx-auto max-w-5xl p-6"><p className="text-sm text-muted-foreground">Loading...</p></main></>;
+  if (!detail) return <><Nav /><main className="mx-auto max-w-5xl p-6"><p className="text-sm text-muted-foreground">Claim not found.</p></main></>;
 
   const { claim, financials, payout_destination: dest } = detail;
 
   return (
     <>
       <Nav />
-      <main style={{ padding: "1.5rem", fontFamily: "system-ui, sans-serif", maxWidth: 1000, margin: "0 auto" }}>
-        <a href="/staff/claims" style={{ color: "#0275d8", textDecoration: "underline" }}>&larr; Back to Claims</a>
+      <main className="mx-auto max-w-5xl p-6">
+        <a href="/staff/claims" className="text-sm text-primary underline">
+          &larr; Back to Claims
+        </a>
 
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "0.5rem" }}>
-          <h1 style={{ margin: 0 }}>Claim {claim.claim_number}</h1>
-          {badge(claim.status, claimColors)}
+        <div className="mt-2 flex items-center justify-between">
+          <h1 className="text-2xl font-bold">Claim {claim.claim_number}</h1>
+          <StatusBadge status={claim.status} />
         </div>
 
-        {error && <p style={{ color: "red", marginTop: "0.5rem" }}>{error}</p>}
+        {error && (
+          <Alert variant="destructive" className="mt-2">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", marginTop: "1rem", fontSize: "0.9rem" }}>
+        {/* Info grid */}
+        <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
           <div>Date of Loss: {claim.date_of_loss}</div>
           <div>Reported: {new Date(claim.reported_at).toLocaleDateString()}</div>
           <div>Estimated: {claim.estimated_amount_cents ? formatCents(claim.estimated_amount_cents) : "—"}</div>
@@ -256,204 +247,261 @@ function ClaimDetailContent() {
         </div>
 
         {/* Financials */}
-        <div style={{
-          marginTop: "1.5rem", padding: "1rem", backgroundColor: "#f8f9fa",
-          borderRadius: 4, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem",
-        }}>
-          <div>
-            <div style={{ fontWeight: "bold", fontSize: "0.85rem", color: "#666" }}>Reserve</div>
-            <div style={{ fontSize: "1.25rem" }}>{formatCents(financials.reserve_cents)}</div>
-          </div>
-          <div>
-            <div style={{ fontWeight: "bold", fontSize: "0.85rem", color: "#666" }}>Paid</div>
-            <div style={{ fontSize: "1.25rem" }}>{formatCents(financials.paid_cents)}</div>
-          </div>
-          <div>
-            <div style={{ fontWeight: "bold", fontSize: "0.85rem", color: "#666" }}>Incurred</div>
-            <div style={{ fontSize: "1.25rem" }}>{formatCents(financials.incurred_cents)}</div>
-          </div>
-        </div>
+        <Card className="mt-6">
+          <CardContent className="grid grid-cols-3 gap-4 pt-6">
+            <div>
+              <div className="text-xs font-bold text-muted-foreground">Reserve</div>
+              <div className="text-xl">{formatCents(financials.reserve_cents)}</div>
+            </div>
+            <div>
+              <div className="text-xs font-bold text-muted-foreground">Paid</div>
+              <div className="text-xl">{formatCents(financials.paid_cents)}</div>
+            </div>
+            <div>
+              <div className="text-xs font-bold text-muted-foreground">Incurred</div>
+              <div className="text-xl">{formatCents(financials.incurred_cents)}</div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Payout Destination */}
-        <h2 style={{ marginTop: "1.5rem" }}>Payout Destination</h2>
+        <h2 className="mt-6 text-lg font-semibold">Payout Destination</h2>
         {dest ? (
-          <div style={{ border: "1px solid #ddd", borderRadius: 4, padding: "1rem", fontSize: "0.9rem" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <strong>{dest.payee_name}</strong> — ****{dest.account_last_four}
-                <span style={{ marginLeft: "0.5rem", fontSize: "0.75rem", color: "#f0ad4e" }}>
-                  [{dest.provider}]
-                </span>
+          <Card className="mt-2">
+            <CardContent className="pt-6 text-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <strong>{dest.payee_name}</strong> — ****{dest.account_last_four}
+                  <span className="ml-2 text-xs text-amber-500">
+                    [{dest.provider}]
+                  </span>
+                </div>
+                <StatusBadge status={dest.verification_status} />
               </div>
-              {badge(dest.verification_status, verifyColors)}
-            </div>
-            <div style={{ marginTop: "0.5rem", fontSize: "0.8rem", color: "#888" }}>
-              Ref: {dest.provider_reference}
-            </div>
-            {dest.verification_status === "PENDING" && (
-              <div style={{ marginTop: "0.5rem" }}>
-                <button
-                  onClick={() => handleVerifyDestination("VERIFIED")}
-                  disabled={actionLoading.startsWith("verify")}
-                  style={{ marginRight: "0.5rem", padding: "0.3rem 0.75rem", backgroundColor: "#5cb85c", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
-                >
-                  Simulate Verify
-                </button>
-                <button
-                  onClick={() => handleVerifyDestination("FAILED")}
-                  disabled={actionLoading.startsWith("verify")}
-                  style={{ padding: "0.3rem 0.75rem", backgroundColor: "#d9534f", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
-                >
-                  Simulate Fail
-                </button>
+              <div className="mt-2 text-xs text-muted-foreground">
+                Ref: {dest.provider_reference}
               </div>
-            )}
-          </div>
+              {dest.verification_status === "PENDING" && (
+                <div className="mt-2 flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => handleVerifyDestination("VERIFIED")}
+                    disabled={actionLoading.startsWith("verify")}
+                  >
+                    Simulate Verify
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => handleVerifyDestination("FAILED")}
+                    disabled={actionLoading.startsWith("verify")}
+                  >
+                    Simulate Fail
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         ) : (
-          <form onSubmit={handleSetDestination} style={{ border: "1px solid #ddd", borderRadius: 4, padding: "1rem" }}>
-            <div style={{ marginBottom: "0.5rem" }}>
-              <label style={{ display: "block", fontWeight: "bold", fontSize: "0.85rem" }}>Payee Name</label>
-              <input value={destPayeeName} onChange={(e) => setDestPayeeName(e.target.value)} required style={{ width: "100%", padding: "0.4rem" }} />
-            </div>
-            <div style={{ marginBottom: "0.5rem" }}>
-              <label style={{ display: "block", fontWeight: "bold", fontSize: "0.85rem" }}>Last 4 Digits</label>
-              <input value={destLastFour} onChange={(e) => setDestLastFour(e.target.value)} required maxLength={4} minLength={4} style={{ width: "100%", padding: "0.4rem" }} />
-            </div>
-            <button type="submit" disabled={actionLoading === "dest"} style={{ padding: "0.3rem 0.75rem", backgroundColor: "#0275d8", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>
-              {actionLoading === "dest" ? "Setting..." : "Set Destination"}
-            </button>
-          </form>
+          <Card className="mt-2">
+            <CardContent className="pt-6">
+              <form onSubmit={handleSetDestination} className="space-y-3">
+                <div>
+                  <Label>Payee Name</Label>
+                  <Input
+                    value={destPayeeName}
+                    onChange={(e) => setDestPayeeName(e.target.value)}
+                    required
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label>Last 4 Digits</Label>
+                  <Input
+                    value={destLastFour}
+                    onChange={(e) => setDestLastFour(e.target.value)}
+                    required
+                    maxLength={4}
+                    minLength={4}
+                    className="mt-1"
+                  />
+                </div>
+                <Button type="submit" disabled={actionLoading === "dest"}>
+                  {actionLoading === "dest" ? "Setting..." : "Set Destination"}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
         )}
 
         {/* Reserves */}
-        <h2 style={{ marginTop: "1.5rem" }}>Reserve Events</h2>
-        <form onSubmit={handleSetReserve} style={{ border: "1px solid #ddd", borderRadius: 4, padding: "1rem", marginBottom: "1rem" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 2fr", gap: "0.5rem" }}>
-            <div>
-              <label style={{ display: "block", fontWeight: "bold", fontSize: "0.85rem" }}>Amount ($)</label>
-              <input type="number" step="0.01" value={reserveAmount} onChange={(e) => setReserveAmount(e.target.value)} required style={{ width: "100%", padding: "0.4rem" }} />
-            </div>
-            <div>
-              <label style={{ display: "block", fontWeight: "bold", fontSize: "0.85rem" }}>Type</label>
-              <select value={reserveType} onChange={(e) => setReserveType(e.target.value)} style={{ width: "100%", padding: "0.4rem" }}>
-                <option value="INITIAL">Initial</option>
-                <option value="ADJUSTMENT">Adjustment</option>
-                <option value="RELEASE">Release</option>
-              </select>
-            </div>
-            <div>
-              <label style={{ display: "block", fontWeight: "bold", fontSize: "0.85rem" }}>Memo</label>
-              <input value={reserveMemo} onChange={(e) => setReserveMemo(e.target.value)} style={{ width: "100%", padding: "0.4rem" }} />
-            </div>
-          </div>
-          <button type="submit" disabled={actionLoading === "reserve"} style={{ marginTop: "0.5rem", padding: "0.3rem 0.75rem", backgroundColor: "#0275d8", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>
-            {actionLoading === "reserve" ? "Setting..." : "Add Reserve Event"}
-          </button>
-        </form>
+        <h2 className="mt-6 text-lg font-semibold">Reserve Events</h2>
+        <Card className="mt-2">
+          <CardContent className="pt-6">
+            <form onSubmit={handleSetReserve} className="space-y-3">
+              <div className="grid grid-cols-[1fr_1fr_2fr] gap-3">
+                <div>
+                  <Label>Amount ($)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={reserveAmount}
+                    onChange={(e) => setReserveAmount(e.target.value)}
+                    required
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label>Type</Label>
+                  <select
+                    value={reserveType}
+                    onChange={(e) => setReserveType(e.target.value)}
+                    className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  >
+                    <option value="INITIAL">Initial</option>
+                    <option value="ADJUSTMENT">Adjustment</option>
+                    <option value="RELEASE">Release</option>
+                  </select>
+                </div>
+                <div>
+                  <Label>Memo</Label>
+                  <Input
+                    value={reserveMemo}
+                    onChange={(e) => setReserveMemo(e.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+              <Button type="submit" disabled={actionLoading === "reserve"}>
+                {actionLoading === "reserve" ? "Setting..." : "Add Reserve Event"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
 
         {reserves.length > 0 && (
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
-            <thead>
-              <tr style={{ borderBottom: "2px solid #ddd", textAlign: "left" }}>
-                <th style={{ padding: "0.4rem" }}>Type</th>
-                <th style={{ padding: "0.4rem" }}>Amount</th>
-                <th style={{ padding: "0.4rem" }}>Memo</th>
-                <th style={{ padding: "0.4rem" }}>Date</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table className="mt-4 text-sm">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Type</TableHead>
+                <TableHead>Amount</TableHead>
+                <TableHead>Memo</TableHead>
+                <TableHead>Date</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {reserves.map((r) => (
-                <tr key={r.id} style={{ borderBottom: "1px solid #eee" }}>
-                  <td style={{ padding: "0.4rem" }}>{r.reserve_type}</td>
-                  <td style={{ padding: "0.4rem" }}>{formatCents(r.amount_cents)}</td>
-                  <td style={{ padding: "0.4rem" }}>{r.memo || "—"}</td>
-                  <td style={{ padding: "0.4rem" }}>{new Date(r.recorded_at).toLocaleString()}</td>
-                </tr>
+                <TableRow key={r.id}>
+                  <TableCell>{r.reserve_type}</TableCell>
+                  <TableCell>{formatCents(r.amount_cents)}</TableCell>
+                  <TableCell>{r.memo || "—"}</TableCell>
+                  <TableCell>{new Date(r.recorded_at).toLocaleString()}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
 
         {/* Payments */}
-        <h2 style={{ marginTop: "1.5rem" }}>Payments</h2>
-        <form onSubmit={handleCreatePayment} style={{ border: "1px solid #ddd", borderRadius: 4, padding: "1rem", marginBottom: "1rem" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "0.5rem" }}>
-            <div>
-              <label style={{ display: "block", fontWeight: "bold", fontSize: "0.85rem" }}>Amount ($)</label>
-              <input type="number" step="0.01" min="0.01" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} required style={{ width: "100%", padding: "0.4rem" }} />
-            </div>
-            <div>
-              <label style={{ display: "block", fontWeight: "bold", fontSize: "0.85rem" }}>Payee</label>
-              <input value={paymentPayee} onChange={(e) => setPaymentPayee(e.target.value)} required style={{ width: "100%", padding: "0.4rem" }} />
-            </div>
-          </div>
-          <button type="submit" disabled={actionLoading === "payment"} style={{ marginTop: "0.5rem", padding: "0.3rem 0.75rem", backgroundColor: "#0275d8", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>
-            {actionLoading === "payment" ? "Creating..." : "Create Payment"}
-          </button>
-        </form>
+        <h2 className="mt-6 text-lg font-semibold">Payments</h2>
+        <Card className="mt-2">
+          <CardContent className="pt-6">
+            <form onSubmit={handleCreatePayment} className="space-y-3">
+              <div className="grid grid-cols-[1fr_2fr] gap-3">
+                <div>
+                  <Label>Amount ($)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    required
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label>Payee</Label>
+                  <Input
+                    value={paymentPayee}
+                    onChange={(e) => setPaymentPayee(e.target.value)}
+                    required
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+              <Button type="submit" disabled={actionLoading === "payment"}>
+                {actionLoading === "payment" ? "Creating..." : "Create Payment"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
 
         {payments.length > 0 && (
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
-            <thead>
-              <tr style={{ borderBottom: "2px solid #ddd", textAlign: "left" }}>
-                <th style={{ padding: "0.4rem" }}>ID</th>
-                <th style={{ padding: "0.4rem" }}>Amount</th>
-                <th style={{ padding: "0.4rem" }}>Payee</th>
-                <th style={{ padding: "0.4rem" }}>Status</th>
-                <th style={{ padding: "0.4rem" }}>Payout Ref</th>
-                <th style={{ padding: "0.4rem" }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table className="mt-4 text-sm">
+            <TableHeader>
+              <TableRow>
+                <TableHead>ID</TableHead>
+                <TableHead>Amount</TableHead>
+                <TableHead>Payee</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Payout Ref</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {payments.map((p) => (
-                <tr key={p.id} style={{ borderBottom: "1px solid #eee" }}>
-                  <td style={{ padding: "0.4rem" }}>{p.id}</td>
-                  <td style={{ padding: "0.4rem" }}>{formatCents(p.amount_cents)}</td>
-                  <td style={{ padding: "0.4rem" }}>{p.payee}</td>
-                  <td style={{ padding: "0.4rem" }}>{badge(p.status, paymentColors)}</td>
-                  <td style={{ padding: "0.4rem", fontSize: "0.75rem" }}>{p.payout_reference || "—"}</td>
-                  <td style={{ padding: "0.4rem" }}>
-                    {p.status === "PENDING_APPROVAL" && (
-                      <button
-                        onClick={() => handleApprovePayment(p.id)}
-                        disabled={actionLoading === `approve-${p.id}`}
-                        style={{ padding: "0.2rem 0.5rem", backgroundColor: "#5cb85c", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", fontSize: "0.8rem", marginRight: "0.25rem" }}
-                      >
-                        Approve
-                      </button>
-                    )}
-                    {p.status === "APPROVED" && (
-                      <button
-                        onClick={() => handleExecutePayout(p.id)}
-                        disabled={actionLoading === `execute-${p.id}`}
-                        style={{ padding: "0.2rem 0.5rem", backgroundColor: "#0275d8", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", fontSize: "0.8rem", marginRight: "0.25rem" }}
-                      >
-                        Execute Payout
-                      </button>
-                    )}
-                    {p.status === "PENDING" && p.payout_reference && (
-                      <>
-                        <button
-                          onClick={() => handleSimulateSettled(p.id, p.payout_reference, p.amount_cents)}
-                          disabled={actionLoading === `settle-${p.id}`}
-                          style={{ padding: "0.2rem 0.5rem", backgroundColor: "#5cb85c", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", fontSize: "0.8rem", marginRight: "0.25rem" }}
+                <TableRow key={p.id}>
+                  <TableCell>{p.id}</TableCell>
+                  <TableCell>{formatCents(p.amount_cents)}</TableCell>
+                  <TableCell>{p.payee}</TableCell>
+                  <TableCell><StatusBadge status={p.status} /></TableCell>
+                  <TableCell className="text-xs">{p.payout_reference || "—"}</TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      {p.status === "PENDING_APPROVAL" && (
+                        <Button
+                          size="sm"
+                          onClick={() => handleApprovePayment(p.id)}
+                          disabled={actionLoading === `approve-${p.id}`}
                         >
-                          Sim Settle
-                        </button>
-                        <button
-                          onClick={() => handleSimulateReturned(p.id, p.payout_reference)}
-                          disabled={actionLoading === `return-${p.id}`}
-                          style={{ padding: "0.2rem 0.5rem", backgroundColor: "#d9534f", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", fontSize: "0.8rem" }}
+                          Approve
+                        </Button>
+                      )}
+                      {p.status === "APPROVED" && (
+                        <Button
+                          size="sm"
+                          onClick={() => handleExecutePayout(p.id)}
+                          disabled={actionLoading === `execute-${p.id}`}
                         >
-                          Sim Return
-                        </button>
-                      </>
-                    )}
-                  </td>
-                </tr>
+                          Execute Payout
+                        </Button>
+                      )}
+                      {p.status === "PENDING" && p.payout_reference && (
+                        <>
+                          <Button
+                            size="sm"
+                            onClick={() => handleSimulateSettled(p.id, p.payout_reference, p.amount_cents)}
+                            disabled={actionLoading === `settle-${p.id}`}
+                          >
+                            Sim Settle
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => handleSimulateReturned(p.id, p.payout_reference)}
+                            disabled={actionLoading === `return-${p.id}`}
+                          >
+                            Sim Return
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
       </main>
     </>

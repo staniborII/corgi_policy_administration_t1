@@ -8,4 +8,5 @@ urlpatterns = [
     path("<int:pk>/", views.PolicyDetailView.as_view(), name="policy-detail"),
     path("<int:pk>/as-of/", views.PolicyAsOfView.as_view(), name="policy-as-of"),
     path("<int:pk>/cancel/", views.CancelPolicyView.as_view(), name="policy-cancel"),
+    path("<int:pk>/decline/", views.DeclinePolicyView.as_view(), name="policy-decline"),
 ]

@@ -34,7 +34,10 @@ class PersonaWebhookView(APIView):
         payload_body = request.body.decode("utf-8")
         signature = request.headers.get("Persona-Signature", "")
 
+        logger.info("Persona webhook received")
+
         if not verify_persona_signature(payload_body=payload_body, signature_header=signature):
+            logger.warning("Persona webhook signature verification failed")
             return Response({"detail": "Invalid signature"}, status=status.HTTP_403_FORBIDDEN)
 
         try:
@@ -56,6 +59,7 @@ class PersonaWebhookView(APIView):
         )
 
         if not created:
+            logger.info(f"Persona webhook duplicate event skipped: event_id={event_id}")
             return Response({"detail": "Already processed"}, status=status.HTTP_200_OK)
 
         try:
@@ -68,6 +72,12 @@ class PersonaWebhookView(APIView):
                     persona_status=parsed["status"],
                 )
             mark_webhook_processed(webhook_event)
+            logger.info(
+                "Persona webhook processed: event_id=%s, type=%s, ref=%s",
+                event_id,
+                parsed["event_type"],
+                parsed.get("reference_id"),
+            )
         except Exception:
             logger.exception("Error processing Persona webhook %s", event_id)
             mark_webhook_failed(webhook_event, "Processing error")
@@ -88,7 +98,10 @@ class StripeWebhookView(APIView):
         payload_body = request.body.decode("utf-8")
         signature = request.headers.get("Stripe-Signature", "")
 
+        logger.info("Stripe webhook received")
+
         if not verify_stripe_signature(payload_body=payload_body, signature_header=signature):
+            logger.warning("Stripe webhook signature verification failed")
             return Response({"detail": "Invalid signature"}, status=status.HTTP_403_FORBIDDEN)
 
         try:
@@ -110,11 +123,13 @@ class StripeWebhookView(APIView):
         )
 
         if not created:
+            logger.info(f"Stripe webhook duplicate event skipped: event_id={event_id}, type={event_type}")
             return Response({"detail": "Already processed"}, status=status.HTTP_200_OK)
 
         try:
             self._dispatch_event(event_type, event_data)
             mark_webhook_processed(webhook_event)
+            logger.info(f"Stripe webhook processed successfully: event_id={event_id}, type={event_type}")
         except Exception:
             logger.exception("Error processing Stripe webhook %s", event_id)
             mark_webhook_failed(webhook_event, "Processing error")

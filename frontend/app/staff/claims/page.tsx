@@ -1,34 +1,22 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { api, type ClaimRecord } from "@/lib/api";
 import Nav from "@/components/Nav";
-
-function formatCents(cents: number) {
-  return `$${(cents / 100).toFixed(2)}`;
-}
-
-function statusBadge(s: string) {
-  const colors: Record<string, string> = {
-    OPEN: "#0275d8",
-    UNDER_REVIEW: "#f0ad4e",
-    RESERVED: "#5bc0de",
-    PAYMENT_PENDING: "#f0ad4e",
-    PARTIALLY_PAID: "#0275d8",
-    PAID: "#5cb85c",
-    CLOSED: "#999",
-  };
-  return (
-    <span style={{
-      padding: "2px 8px", borderRadius: 4, fontSize: "0.8rem",
-      backgroundColor: colors[s] || "#999", color: "#fff",
-    }}>
-      {s.replace(/_/g, " ")}
-    </span>
-  );
-}
+import { formatCents } from "@/lib/format";
+import { StatusBadge } from "@/components/status-badge";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function StaffClaimsPage() {
   const { user, loading } = useAuth();
@@ -36,7 +24,6 @@ export default function StaffClaimsPage() {
   const [claims, setClaims] = useState<ClaimRecord[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState("");
-  const fetched = useRef(false);
 
   useEffect(() => {
     if (loading) return;
@@ -46,9 +33,9 @@ export default function StaffClaimsPage() {
   }, [user, loading, router]);
 
   useEffect(() => {
-    if (loading || !user || fetched.current) return;
-    fetched.current = true;
+    if (loading || !user) return;
     let cancelled = false;
+    setLoadingData(true);
     api.listClaims()
       .then((data) => { if (!cancelled) setClaims(data); })
       .catch(() => { if (!cancelled) setError("Failed to load claims."); })
@@ -61,49 +48,62 @@ export default function StaffClaimsPage() {
   return (
     <>
       <Nav />
-      <main style={{ padding: "1.5rem", fontFamily: "system-ui, sans-serif", maxWidth: 1000, margin: "0 auto" }}>
-        <h1>Claims Management</h1>
+      <main className="mx-auto max-w-5xl p-6">
+        <h1 className="text-2xl font-bold">Claims Management</h1>
 
-        {error && <p style={{ color: "red" }}>{error}</p>}
-        {loadingData && <p>Loading...</p>}
+        {error && (
+          <Alert variant="destructive" className="mt-4">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        {loadingData && (
+          <div className="mt-4 space-y-3">
+            {[1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-10 w-full" />
+            ))}
+          </div>
+        )}
         {!loadingData && claims.length === 0 && (
-          <p style={{ color: "#666", textAlign: "center", padding: "2rem" }}>No claims found.</p>
+          <div className="py-8 text-center text-muted-foreground">
+            <p>No claims found.</p>
+            <p className="mt-1 text-sm">Claims will appear here once submitted.</p>
+          </div>
         )}
 
         {claims.length > 0 && (
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.9rem" }}>
-            <thead>
-              <tr style={{ borderBottom: "2px solid #ddd", textAlign: "left" }}>
-                <th style={{ padding: "0.5rem" }}>Claim #</th>
-                <th style={{ padding: "0.5rem" }}>Status</th>
-                <th style={{ padding: "0.5rem" }}>Date of Loss</th>
-                <th style={{ padding: "0.5rem" }}>Estimated</th>
-                <th style={{ padding: "0.5rem" }}>Reported</th>
-                <th style={{ padding: "0.5rem" }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table className="mt-4 text-sm">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Claim #</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Date of Loss</TableHead>
+                <TableHead>Estimated</TableHead>
+                <TableHead>Reported</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {claims.map((c) => (
-                <tr key={c.id} style={{ borderBottom: "1px solid #eee" }}>
-                  <td style={{ padding: "0.5rem" }}>{c.claim_number}</td>
-                  <td style={{ padding: "0.5rem" }}>{statusBadge(c.status)}</td>
-                  <td style={{ padding: "0.5rem" }}>{c.date_of_loss}</td>
-                  <td style={{ padding: "0.5rem" }}>
+                <TableRow key={c.id}>
+                  <TableCell>{c.claim_number}</TableCell>
+                  <TableCell><StatusBadge status={c.status} /></TableCell>
+                  <TableCell>{c.date_of_loss}</TableCell>
+                  <TableCell>
                     {c.estimated_amount_cents ? formatCents(c.estimated_amount_cents) : "—"}
-                  </td>
-                  <td style={{ padding: "0.5rem" }}>{new Date(c.reported_at).toLocaleDateString()}</td>
-                  <td style={{ padding: "0.5rem" }}>
+                  </TableCell>
+                  <TableCell>{new Date(c.reported_at).toLocaleDateString()}</TableCell>
+                  <TableCell>
                     <a
                       href={`/staff/claims/detail?id=${c.id}`}
-                      style={{ color: "#0275d8", textDecoration: "underline", cursor: "pointer" }}
+                      className="text-primary underline"
                     >
                       Manage
                     </a>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
       </main>
     </>

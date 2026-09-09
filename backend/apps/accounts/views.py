@@ -4,6 +4,8 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.accounts.models import User
+from apps.accounts.permissions import IsStaffUser
 from apps.accounts.serializers import LoginSerializer, RegisterCustomerSerializer, UserSerializer
 
 
@@ -45,3 +47,13 @@ class RegisterCustomerView(APIView):
             {"token": token.key, "user": UserSerializer(user).data},
             status=status.HTTP_201_CREATED,
         )
+
+
+class ListCustomersView(APIView):
+    permission_classes = [IsStaffUser]
+
+    def get(self, request):
+        customers = User.objects.filter(
+            role=User.Role.CUSTOMER, is_active=True, is_superuser=False, is_staff=False
+        ).order_by("first_name", "last_name")
+        return Response(UserSerializer(customers, many=True).data)

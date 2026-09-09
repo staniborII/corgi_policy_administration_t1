@@ -20,8 +20,8 @@ export default function Home() {
   }, [user, loading, router]);
 
   return (
-    <main style={{ padding: "2rem", fontFamily: "system-ui, sans-serif" }}>
-      <p>Loading...</p>
+    <main className="flex min-h-screen items-center justify-center">
+      <p className="text-muted-foreground">Loading...</p>
     </main>
   );
 }

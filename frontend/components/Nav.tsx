@@ -1,12 +1,30 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+const staffLinks = [
+  { href: "/staff/brokers", label: "Brokers" },
+  { href: "/staff/policies", label: "Policies" },
+  { href: "/staff/claims", label: "Claims" },
+  { href: "/staff/payments", label: "Payments" },
+  { href: "/staff/statements", label: "Statements" },
+  { href: "/staff/reconciliation", label: "Reconciliation" },
+];
+
+const customerLinks = [
+  { href: "/customer/policies", label: "My Policies" },
+  { href: "/customer/claims", label: "My Claims" },
+];
 
 export default function Nav() {
   const { user, logout } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   if (!user) return null;
 
@@ -15,35 +33,34 @@ export default function Nav() {
     router.replace("/login");
   }
 
+  const links = user.role === "STAFF" ? staffLinks : customerLinks;
+
   return (
-    <nav style={{
-      display: "flex", gap: "1rem", alignItems: "center",
-      padding: "0.75rem 1.5rem",
-      borderBottom: "1px solid #ddd",
-      fontFamily: "system-ui, sans-serif",
-      fontSize: "0.9rem",
-    }}>
-      <strong>Corgi</strong>
-      {user.role === "STAFF" && (
-        <>
-          <Link href="/staff/brokers">Brokers</Link>
-          <Link href="/staff/policies">Policies</Link>
-          <Link href="/staff/claims">Claims</Link>
-          <Link href="/staff/payments">Payments</Link>
-          <Link href="/staff/statements">Statements</Link>
-          <Link href="/staff/reconciliation">Reconciliation</Link>
-        </>
-      )}
-      {user.role === "CUSTOMER" && (
-        <>
-          <Link href="/customer/policies">My Policies</Link>
-          <Link href="/customer/claims">My Claims</Link>
-        </>
-      )}
-      <span style={{ marginLeft: "auto" }}>
+    <nav className="flex items-center gap-1 border-b px-4 py-2 text-sm">
+      <span className="mr-2 text-base font-bold">Corgi</span>
+      {links.map(({ href, label }) => {
+        const isActive = pathname === href || pathname.startsWith(href + "/");
+        return (
+          <Link
+            key={href}
+            href={href}
+            className={cn(
+              "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+              isActive
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            )}
+          >
+            {label}
+          </Link>
+        );
+      })}
+      <span className="ml-auto text-sm text-muted-foreground">
         {user.first_name || user.username} ({user.role})
       </span>
-      <button onClick={handleLogout} style={{ cursor: "pointer" }}>Logout</button>
+      <Button variant="ghost" size="sm" onClick={handleLogout}>
+        Logout
+      </Button>
     </nav>
   );
 }

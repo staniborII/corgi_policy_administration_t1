@@ -1,9 +1,13 @@
+import logging
+
 from django.db import transaction
 from django.utils.crypto import get_random_string
 
 from apps.accounts.models import User
 from apps.brokers.models import Broker, KYBVerification
 from apps.integrations.persona.client import create_persona_inquiry
+
+logger = logging.getLogger(__name__)
 
 
 class BrokerError(Exception):
@@ -32,6 +36,8 @@ def create_broker(*, company_name, commission_rate_bps, contact_email, contact_f
         status=Broker.Status.PENDING_KYB,
     )
 
+    logger.info(f"Broker created: broker_id={broker.id}")
+
     return broker
 
 
@@ -57,6 +63,8 @@ def initiate_kyb(*, broker_id):
     broker.status = Broker.Status.PENDING_KYB
     broker.save(update_fields=["status", "updated_at"])
 
+    logger.info(f"KYB initiated: broker_id={broker_id}, provider_reference={inquiry_id}")
+
     return kyb
 
 
@@ -68,7 +76,9 @@ def process_kyb_webhook(*, broker_id, inquiry_id, persona_status):
     """
     broker = Broker.objects.select_for_update().get(id=broker_id)
 
+    old_status = broker.status
     if broker.status in (Broker.Status.APPROVED, Broker.Status.REJECTED):
+        logger.info(f"KYB webhook skipped for broker_id={broker_id}, already in terminal status={broker.status}")
         return broker
 
     kyb = KYBVerification.objects.filter(
@@ -93,5 +103,7 @@ def process_kyb_webhook(*, broker_id, inquiry_id, persona_status):
         kyb.save(update_fields=["status", "updated_at"])
         broker.status = Broker.Status.REJECTED
         broker.save(update_fields=["status", "updated_at"])
+
+    logger.info(f"KYB status updated: broker_id={broker_id}, old_status={old_status} -> new_status={broker.status}")
 
     return broker

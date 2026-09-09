@@ -12,39 +12,23 @@ import {
   ApiError,
 } from "@/lib/api";
 import Nav from "@/components/Nav";
+import { formatCents } from "@/lib/format";
+import { StatusBadge } from "@/components/status-badge";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-function formatCents(cents: number) {
-  return `$${(cents / 100).toFixed(2)}`;
-}
-
-function statusBadge(status: string) {
-  const colors: Record<string, string> = {
-    DRAFT: "#0275d8",
-    PENDING_PAYMENT: "#f0ad4e",
-    PENDING_CUSTOMER_APPROVAL: "#e67e22",
-    ACTIVE: "#5cb85c",
-    APPLIED: "#5cb85c",
-    APPROVED: "#28a745",
-    REVERSED: "#d9534f",
-    CANCELLED: "#d9534f",
-    EXPIRED: "#999",
-  };
-  return (
-    <span
-      style={{
-        padding: "2px 8px",
-        borderRadius: 4,
-        fontSize: "0.8rem",
-        backgroundColor: colors[status] || "#999",
-        color: "#fff",
-      }}
-    >
-      {status}
-    </span>
-  );
-}
 
 export default function CustomerPolicyDetailPage() {
   return (
@@ -157,8 +141,20 @@ function CustomerPolicyDetailContent() {
     return (
       <>
         <Nav />
-        <main style={{ padding: "1.5rem", fontFamily: "system-ui, sans-serif", maxWidth: 900, margin: "0 auto" }}>
-          <p>Loading...</p>
+        <main className="mx-auto max-w-4xl p-6">
+          <Skeleton className="mb-4 h-8 w-32" />
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-6 w-20" />
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-5 w-36" />
+            <Skeleton className="h-5 w-36" />
+          </div>
+          <Skeleton className="mt-6 h-32 w-full" />
+          <Skeleton className="mt-6 h-48 w-full" />
         </main>
       </>
     );
@@ -168,11 +164,20 @@ function CustomerPolicyDetailContent() {
     return (
       <>
         <Nav />
-        <main style={{ padding: "1.5rem", fontFamily: "system-ui, sans-serif", maxWidth: 900, margin: "0 auto" }}>
-          <p style={{ color: "red" }}>{error || "Policy not found."}</p>
-          <button onClick={() => router.push("/customer/policies")} style={{ padding: "0.5rem 1rem" }}>
-            Back to My Policies
-          </button>
+        <main className="mx-auto max-w-4xl p-6">
+          <Alert variant="destructive">
+            <AlertDescription>{error || "Policy not found."}</AlertDescription>
+          </Alert>
+          <div className="mt-4 flex gap-2">
+            <Button variant="outline" onClick={() => router.push("/customer/policies")}>
+              Back to My Policies
+            </Button>
+            {error && (
+              <Button variant="secondary" onClick={loadData}>
+                Retry
+              </Button>
+            )}
+          </div>
         </main>
       </>
     );
@@ -184,187 +189,235 @@ function CustomerPolicyDetailContent() {
   return (
     <>
       <Nav />
-      <main style={{ padding: "1.5rem", fontFamily: "system-ui, sans-serif", maxWidth: 900, margin: "0 auto" }}>
-        <button onClick={() => router.push("/customer/policies")} style={{ marginBottom: "1rem", cursor: "pointer", background: "none", border: "none", color: "#0275d8", fontSize: "0.9rem" }}>
+      <main className="mx-auto max-w-4xl p-6">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => router.push("/customer/policies")}
+          className="mb-4"
+        >
           &larr; Back to My Policies
-        </button>
+        </Button>
 
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h1 style={{ margin: 0 }}>{policy.policy_number}</h1>
-          {statusBadge(policy.status)}
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">{policy.policy_number}</h1>
+          <StatusBadge status={policy.status} />
         </div>
 
-        <div style={{ marginTop: "1rem", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", fontSize: "0.9rem" }}>
+        <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
           <div>Effective: {policy.effective_date}</div>
           <div>Expires: {policy.expiration_date}</div>
           <div>Premium: {formatCents(policy.premium_amount_cents)}</div>
           <div>Territory: {policy.coverage_territory}</div>
         </div>
 
-        {error && <p style={{ color: "red", marginTop: "0.5rem" }}>{error}</p>}
+        {error && (
+          <Alert variant="destructive" className="mt-4">
+            <AlertDescription className="flex items-center justify-between">
+              {error}
+              <Button variant="outline" size="sm" onClick={loadData}>
+                Retry
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Pending Approvals */}
         {pendingApproval.length > 0 && (
-          <div style={{ marginTop: "1.5rem", padding: "1rem", border: "2px solid #e67e22", borderRadius: 4, backgroundColor: "#fff8f0" }}>
-            <h3 style={{ marginTop: 0, color: "#e67e22" }}>Endorsements Requiring Your Approval</h3>
-            {pendingApproval.map((e) => (
-              <div key={e.id} style={{ padding: "0.75rem", border: "1px solid #eee", borderRadius: 4, marginBottom: "0.5rem", backgroundColor: "#fff" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <strong>{e.endorsement_number}</strong>
-                  {statusBadge(e.status)}
-                </div>
-                <p style={{ fontSize: "0.85rem", margin: "0.5rem 0" }}>{e.description}</p>
-                <div style={{ fontSize: "0.85rem", color: "#666" }}>
-                  <span>Type: {e.endorsement_type}</span>
-                  {" | "}
-                  <span>Effective: {e.effective_date}</span>
-                  {" | "}
-                  <span>Premium Change: {formatCents(e.premium_change_cents)}</span>
-                </div>
-                {e.charges_snapshot && (
-                  <div style={{ fontSize: "0.85rem", marginTop: "0.25rem" }}>
-                    Total Due: <strong>{formatCents(e.charges_snapshot.total_cents as number)}</strong>
-                  </div>
-                )}
-                <button
-                  onClick={() => handleApprove(e.id)}
-                  disabled={actionLoading === e.id}
-                  style={{ marginTop: "0.5rem", padding: "0.4rem 1rem", backgroundColor: "#28a745", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
-                >
-                  {actionLoading === e.id ? "Approving..." : "Approve Endorsement"}
-                </button>
-              </div>
-            ))}
-          </div>
+          <Card className="mt-6 border-2 border-orange-400 bg-orange-50">
+            <CardHeader>
+              <CardTitle className="text-orange-600">
+                Endorsements Requiring Your Approval
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {pendingApproval.map((e) => (
+                <Card key={e.id}>
+                  <CardContent className="pt-4">
+                    <div className="flex items-center justify-between">
+                      <strong>{e.endorsement_number}</strong>
+                      <StatusBadge status={e.status} />
+                    </div>
+                    <p className="mt-2 text-sm">{e.description}</p>
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      <span>Type: {e.endorsement_type}</span>
+                      {" | "}
+                      <span>Effective: {e.effective_date}</span>
+                      {" | "}
+                      <span>Premium Change: {formatCents(e.premium_change_cents)}</span>
+                    </div>
+                    {e.charges_snapshot && (
+                      <div className="mt-1 text-sm">
+                        Total Due: <strong>{formatCents(e.charges_snapshot.total_cents as number)}</strong>
+                      </div>
+                    )}
+                    <Button
+                      onClick={() => handleApprove(e.id)}
+                      disabled={actionLoading === e.id}
+                      className="mt-3 bg-green-600 hover:bg-green-700"
+                    >
+                      {actionLoading === e.id ? "Approving..." : "Approve Endorsement"}
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </CardContent>
+          </Card>
         )}
 
         {/* Pending Payment Notice */}
         {hasPendingPayment && (
-          <div style={{ marginTop: "1rem", padding: "0.75rem", backgroundColor: "#fff3cd", borderRadius: 4 }}>
-            <p style={{ margin: "0 0 0.5rem 0", fontSize: "0.85rem" }}>
-              Additional payment required for endorsed changes.
-            </p>
-            <button
-              onClick={() => handlePayEndorsement(policy.id)}
-              style={{ padding: "0.5rem 1rem", backgroundColor: "#5cb85c", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
-            >
-              Pay Additional Premium
-            </button>
-          </div>
+          <Card className="mt-4 border-amber-200 bg-amber-50">
+            <CardContent className="pt-4">
+              <p className="mb-2 text-sm">
+                Additional payment required for endorsed changes.
+              </p>
+              <Button
+                onClick={() => handlePayEndorsement(policy.id)}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                Pay Additional Premium
+              </Button>
+            </CardContent>
+          </Card>
         )}
 
         {/* Documents */}
-        <div style={{ marginTop: "1.5rem", padding: "1rem", border: "1px solid #ddd", borderRadius: 4 }}>
-          <h3 style={{ marginTop: 0 }}>Documents</h3>
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            <a href={pdfUrl("declarations")} style={{ padding: "0.5rem 1rem", backgroundColor: "#0275d8", color: "#fff", borderRadius: 4, textDecoration: "none", fontSize: "0.85rem" }}>
-              Download Declarations
-            </a>
-            <a href={pdfUrl("endorsement-schedule")} style={{ padding: "0.5rem 1rem", backgroundColor: "#0275d8", color: "#fff", borderRadius: 4, textDecoration: "none", fontSize: "0.85rem" }}>
-              Download Endorsement Schedule
-            </a>
-          </div>
-        </div>
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>Documents</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              <a
+                href={pdfUrl("declarations")}
+                className={buttonVariants({ variant: "default", size: "sm" })}
+              >
+                Download Declarations
+              </a>
+              <a
+                href={pdfUrl("endorsement-schedule")}
+                className={buttonVariants({ variant: "default", size: "sm" })}
+              >
+                Download Endorsement Schedule
+              </a>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Historical View */}
-        <div style={{ marginTop: "1.5rem", padding: "1rem", border: "1px solid #ddd", borderRadius: 4 }}>
-          <h3 style={{ marginTop: 0 }}>Historical View (As-Of)</h3>
-          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-            <input
-              type="datetime-local"
-              value={asOfDate}
-              onChange={(e) => setAsOfDate(e.target.value)}
-              style={{ padding: "0.4rem" }}
-            />
-            <button onClick={handleAsOf} disabled={loadingAsOf} style={{ padding: "0.4rem 1rem" }}>
-              {loadingAsOf ? "Loading..." : "View"}
-            </button>
-          </div>
-
-          {asOfSnapshot && (
-            <div style={{ marginTop: "0.75rem", padding: "0.75rem", backgroundColor: "#f0f7ff", borderRadius: 4 }}>
-              <p><strong>As of:</strong> {new Date(asOfSnapshot.as_of).toLocaleString()}</p>
-              <p>Effective Premium: {formatCents(asOfSnapshot.effective_premium_cents)}</p>
-              {asOfSnapshot.endorsements.length > 0 ? (
-                <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "0.5rem", fontSize: "0.85rem" }}>
-                  <thead>
-                    <tr style={{ borderBottom: "1px solid #ccc", textAlign: "left" }}>
-                      <th style={{ padding: "0.25rem" }}>Number</th>
-                      <th style={{ padding: "0.25rem" }}>Effective</th>
-                      <th style={{ padding: "0.25rem" }}>Change</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {asOfSnapshot.endorsements.map((e) => (
-                      <tr key={e.id} style={{ borderBottom: "1px solid #eee" }}>
-                        <td style={{ padding: "0.25rem" }}>{e.endorsement_number}</td>
-                        <td style={{ padding: "0.25rem" }}>{e.effective_date}</td>
-                        <td style={{ padding: "0.25rem" }}>{formatCents(e.premium_change_cents)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <p style={{ fontSize: "0.85rem", color: "#666" }}>No endorsements at that time.</p>
-              )}
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>Historical View (As-Of)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                type="datetime-local"
+                value={asOfDate}
+                onChange={(e) => setAsOfDate(e.target.value)}
+                className="w-auto"
+              />
+              <Button
+                variant="outline"
+                onClick={handleAsOf}
+                disabled={loadingAsOf}
+              >
+                {loadingAsOf ? "Loading..." : "View"}
+              </Button>
             </div>
-          )}
-        </div>
+
+            {asOfSnapshot && (
+              <div className="mt-3 rounded-md bg-blue-50 p-3">
+                <p>
+                  <strong>As of:</strong> {new Date(asOfSnapshot.as_of).toLocaleString()}
+                </p>
+                <p>Effective Premium: {formatCents(asOfSnapshot.effective_premium_cents)}</p>
+                {asOfSnapshot.endorsements.length > 0 ? (
+                  <Table className="mt-2">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Number</TableHead>
+                        <TableHead>Effective</TableHead>
+                        <TableHead>Change</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {asOfSnapshot.endorsements.map((e) => (
+                        <TableRow key={e.id}>
+                          <TableCell>{e.endorsement_number}</TableCell>
+                          <TableCell>{e.effective_date}</TableCell>
+                          <TableCell>{formatCents(e.premium_change_cents)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    No endorsements at that time.
+                  </p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* All Endorsements */}
-        <div style={{ marginTop: "1.5rem" }}>
-          <h2>Endorsement History</h2>
-          {endorsements.length === 0 && <p style={{ color: "#666" }}>No endorsements on this policy.</p>}
+        <div className="mt-6">
+          <h2 className="text-xl font-semibold">Endorsement History</h2>
+          {endorsements.length === 0 && (
+            <p className="mt-2 text-muted-foreground">No endorsements on this policy.</p>
+          )}
           {endorsements.length > 0 && (
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ borderBottom: "2px solid #ddd", textAlign: "left" }}>
-                  <th style={{ padding: "0.5rem" }}>Number</th>
-                  <th style={{ padding: "0.5rem" }}>Status</th>
-                  <th style={{ padding: "0.5rem" }}>Effective</th>
-                  <th style={{ padding: "0.5rem" }}>Premium Change</th>
-                  <th style={{ padding: "0.5rem" }}>Description</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table className="mt-2">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Number</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Effective</TableHead>
+                  <TableHead>Premium Change</TableHead>
+                  <TableHead>Description</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {endorsements.map((e) => (
-                  <tr key={e.id} style={{ borderBottom: "1px solid #eee" }}>
-                    <td style={{ padding: "0.5rem", fontSize: "0.85rem" }}>{e.endorsement_number}</td>
-                    <td style={{ padding: "0.5rem" }}>{statusBadge(e.status)}</td>
-                    <td style={{ padding: "0.5rem", fontSize: "0.85rem" }}>{e.effective_date}</td>
-                    <td style={{ padding: "0.5rem", fontSize: "0.85rem" }}>{formatCents(e.premium_change_cents)}</td>
-                    <td style={{ padding: "0.5rem", fontSize: "0.85rem" }}>{e.description}</td>
-                  </tr>
+                  <TableRow key={e.id}>
+                    <TableCell>{e.endorsement_number}</TableCell>
+                    <TableCell><StatusBadge status={e.status} /></TableCell>
+                    <TableCell>{e.effective_date}</TableCell>
+                    <TableCell>{formatCents(e.premium_change_cents)}</TableCell>
+                    <TableCell>{e.description}</TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           )}
         </div>
 
         {/* Refunds */}
         {refunds.length > 0 && (
-          <div style={{ marginTop: "1.5rem" }}>
-            <h2>Refunds</h2>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ borderBottom: "2px solid #ddd", textAlign: "left" }}>
-                  <th style={{ padding: "0.5rem" }}>Amount</th>
-                  <th style={{ padding: "0.5rem" }}>Status</th>
-                  <th style={{ padding: "0.5rem" }}>Reason</th>
-                  <th style={{ padding: "0.5rem" }}>Date</th>
-                </tr>
-              </thead>
-              <tbody>
+          <div className="mt-6">
+            <h2 className="text-xl font-semibold">Refunds</h2>
+            <Table className="mt-2">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Reason</TableHead>
+                  <TableHead>Date</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {refunds.map((r) => (
-                  <tr key={r.id} style={{ borderBottom: "1px solid #eee" }}>
-                    <td style={{ padding: "0.5rem", fontSize: "0.85rem" }}>{formatCents(r.amount_cents)}</td>
-                    <td style={{ padding: "0.5rem" }}>{statusBadge(r.status)}</td>
-                    <td style={{ padding: "0.5rem", fontSize: "0.85rem" }}>{r.reason}</td>
-                    <td style={{ padding: "0.5rem", fontSize: "0.85rem" }}>{new Date(r.created_at).toLocaleDateString()}</td>
-                  </tr>
+                  <TableRow key={r.id}>
+                    <TableCell>{formatCents(r.amount_cents)}</TableCell>
+                    <TableCell><StatusBadge status={r.status} /></TableCell>
+                    <TableCell>{r.reason}</TableCell>
+                    <TableCell>{new Date(r.created_at).toLocaleDateString()}</TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
       </main>

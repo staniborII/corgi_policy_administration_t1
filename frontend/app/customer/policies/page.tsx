@@ -1,49 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { api, type Policy, type PaymentRecord } from "@/lib/api";
 import Nav from "@/components/Nav";
-
-function formatCents(cents: number) {
-  return `$${(cents / 100).toFixed(2)}`;
-}
-
-function statusBadge(status: string) {
-  const colors: Record<string, string> = {
-    DRAFT: "#0275d8",
-    PENDING_PAYMENT: "#f0ad4e",
-    ACTIVE: "#5cb85c",
-    CANCELLED: "#d9534f",
-    EXPIRED: "#999",
-  };
-  return (
-    <span style={{
-      padding: "2px 8px", borderRadius: 4, fontSize: "0.8rem",
-      backgroundColor: colors[status] || "#999", color: "#fff",
-    }}>
-      {status}
-    </span>
-  );
-}
-
-function paymentStatusBadge(status: string) {
-  const colors: Record<string, string> = {
-    PENDING: "#f0ad4e",
-    PROCESSING: "#0275d8",
-    SUCCEEDED: "#5cb85c",
-    FAILED: "#d9534f",
-  };
-  return (
-    <span style={{
-      padding: "2px 8px", borderRadius: 4, fontSize: "0.75rem",
-      backgroundColor: colors[status] || "#999", color: "#fff",
-    }}>
-      {status}
-    </span>
-  );
-}
+import { formatCents } from "@/lib/format";
+import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function CustomerPoliciesPage() {
   const { user, loading } = useAuth();
@@ -52,8 +20,8 @@ export default function CustomerPoliciesPage() {
   const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState("");
   const [paymentLoading, setPaymentLoading] = useState<number | null>(null);
+  const [decliningId, setDecliningId] = useState<number | null>(null);
   const [payments, setPayments] = useState<Record<number, PaymentRecord[]>>({});
-  const fetched = useRef(false);
 
   useEffect(() => {
     if (loading) return;
@@ -63,9 +31,9 @@ export default function CustomerPoliciesPage() {
   }, [user, loading, router]);
 
   useEffect(() => {
-    if (loading || !user || fetched.current) return;
-    fetched.current = true;
+    if (loading || !user) return;
     let cancelled = false;
+    setLoadingData(true);
     api.listPolicies()
       .then((data) => { if (!cancelled) setPolicies(data); })
       .catch(() => { if (!cancelled) setError("Failed to load policies."); })
@@ -93,6 +61,21 @@ export default function CustomerPoliciesPage() {
     }
   }
 
+  async function handleDecline(policyId: number) {
+    if (!confirm("Are you sure you want to decline this policy? This cannot be undone.")) return;
+    setDecliningId(policyId);
+    setError("");
+    try {
+      await api.declinePolicy(policyId);
+      const data = await api.listPolicies();
+      setPolicies(data);
+    } catch {
+      setError("Failed to decline policy.");
+    } finally {
+      setDecliningId(null);
+    }
+  }
+
   async function loadPayments(policyId: number) {
     try {
       const data = await api.listPolicyPayments(policyId);
@@ -107,102 +90,173 @@ export default function CustomerPoliciesPage() {
   return (
     <>
       <Nav />
-      <main style={{ padding: "1.5rem", fontFamily: "system-ui, sans-serif", maxWidth: 900, margin: "0 auto" }}>
-        <h1>My Policies</h1>
+      <main className="mx-auto max-w-4xl p-6">
+        <h1 className="text-2xl font-bold">My Policies</h1>
 
-        {error && <p style={{ color: "red" }}>{error}</p>}
-        {loadingData && <p>Loading...</p>}
+        {error && (
+          <Alert variant="destructive" className="mt-4">
+            <AlertDescription className="flex items-center justify-between">
+              {error}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setLoadingData(true);
+                  setError("");
+                  api.listPolicies()
+                    .then(setPolicies)
+                    .catch(() => setError("Failed to load policies."))
+                    .finally(() => setLoadingData(false));
+                }}
+              >
+                Retry
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+        {loadingData && (
+          <div className="mt-4 space-y-4">
+            {[1, 2].map((i) => (
+              <Card key={i}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <Skeleton className="h-6 w-40" />
+                    <Skeleton className="h-6 w-20" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Skeleton className="h-5 w-36" />
+                    <Skeleton className="h-5 w-36" />
+                    <Skeleton className="h-5 w-32" />
+                    <Skeleton className="h-5 w-32" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
         {!loadingData && policies.length === 0 && (
-          <div style={{ padding: "2rem", textAlign: "center", color: "#666" }}>
+          <div className="py-8 text-center text-muted-foreground">
             <p>No policies found.</p>
             <p>Your policies will appear here once created by Staff.</p>
           </div>
         )}
 
         {policies.length > 0 && (
-          <div>
+          <div className="mt-4 space-y-4">
             {policies.map((p) => (
-              <div key={p.id} style={{
-                border: "1px solid #ddd", borderRadius: 4, padding: "1rem",
-                marginBottom: "1rem",
-              }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <h3 style={{ margin: 0 }}>
-                    <a href={`/customer/policies/detail?id=${p.id}`} style={{ color: "#0275d8", textDecoration: "underline" }}>
-                      {p.policy_number}
-                    </a>
-                  </h3>
-                  {statusBadge(p.status)}
-                </div>
-                <div style={{ marginTop: "0.75rem", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", fontSize: "0.9rem" }}>
-                  <div>Effective: {p.effective_date}</div>
-                  <div>Expires: {p.expiration_date}</div>
-                  <div>Premium: {formatCents(p.premium_amount_cents)}</div>
-                  <div>Territory: {p.coverage_territory}</div>
-                </div>
-
-                {(p.status === "DRAFT" || p.status === "PENDING_PAYMENT") && (
-                  <div style={{
-                    marginTop: "0.75rem", padding: "0.75rem",
-                    backgroundColor: "#fff3cd", borderRadius: 4,
-                  }}>
-                    <p style={{ margin: "0 0 0.5rem 0", fontSize: "0.85rem" }}>
-                      Payment required to activate this policy.
-                    </p>
-                    <button
-                      onClick={() => handlePay(p.id)}
-                      disabled={paymentLoading === p.id}
-                      style={{
-                        padding: "0.5rem 1rem", backgroundColor: "#5cb85c",
-                        color: "#fff", border: "none", borderRadius: 4, cursor: "pointer",
-                      }}
-                    >
-                      {paymentLoading === p.id ? "Processing..." : "Pay Now"}
-                    </button>
+              <Card key={p.id}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold">
+                      <a
+                        href={`/customer/policies/detail?id=${p.id}`}
+                        className="text-primary underline"
+                      >
+                        {p.policy_number}
+                      </a>
+                    </h3>
+                    <StatusBadge status={p.status} />
                   </div>
-                )}
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>Effective: {p.effective_date}</div>
+                    <div>Expires: {p.expiration_date}</div>
+                    <div>Premium: {formatCents(p.premium_amount_cents)}</div>
+                    <div>Territory: {p.coverage_territory}</div>
+                  </div>
 
-                {p.status === "ACTIVE" && (
-                  <p style={{
-                    marginTop: "0.75rem", padding: "0.5rem",
-                    backgroundColor: "#d4edda", borderRadius: 4, fontSize: "0.85rem",
-                  }}>
-                    Policy is active. Coverage is in effect.
-                  </p>
-                )}
-
-                <div style={{ marginTop: "0.5rem" }}>
-                  <button
-                    onClick={() => loadPayments(p.id)}
-                    style={{ fontSize: "0.8rem", cursor: "pointer", background: "none", border: "none", color: "#0275d8", textDecoration: "underline" }}
-                  >
-                    View Payments
-                  </button>
-                  {payments[p.id] && (
-                    <div style={{ marginTop: "0.5rem", fontSize: "0.85rem" }}>
-                      {payments[p.id].length === 0 ? (
-                        <p style={{ color: "#666" }}>No payments yet.</p>
-                      ) : (
-                        payments[p.id].map((pay) => (
-                          <div key={pay.id} style={{
-                            padding: "0.5rem", border: "1px solid #eee",
-                            borderRadius: 4, marginBottom: "0.25rem",
-                          }}>
-                            <span>{formatCents(pay.amount_cents)}</span>
-                            {" "}
-                            {paymentStatusBadge(pay.status)}
-                            {" "}
-                            <span style={{ color: "#666" }}>{new Date(pay.created_at).toLocaleDateString()}</span>
-                            {pay.stripe_payment_intent_id.startsWith("SIMULATED") && (
-                              <span style={{ marginLeft: "0.5rem", fontSize: "0.75rem", color: "#f0ad4e" }}>SIMULATED</span>
-                            )}
+                  {(p.status === "DRAFT" || p.status === "PENDING_PAYMENT") && (() => {
+                    const effectivePassed = new Date(p.effective_date + "T00:00:00") < new Date(new Date().toDateString());
+                    return effectivePassed ? (
+                      <Card className="mt-3 border-red-200 bg-red-50">
+                        <CardContent className="pt-4">
+                          <p className="mb-2 text-sm text-red-800">
+                            This policy&apos;s effective date ({p.effective_date}) has passed. Payment is no longer accepted. Please contact staff to re-issue with a new effective date.
+                          </p>
+                          <Button
+                            variant="destructive"
+                            onClick={() => handleDecline(p.id)}
+                            disabled={decliningId === p.id}
+                          >
+                            {decliningId === p.id ? "Declining..." : "Decline Policy"}
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      <Card className="mt-3 border-amber-200 bg-amber-50">
+                        <CardContent className="pt-4">
+                          <p className="mb-2 text-sm">
+                            Payment required to activate this policy.
+                          </p>
+                          <div className="flex gap-2">
+                            <Button
+                              onClick={() => handlePay(p.id)}
+                              disabled={paymentLoading === p.id || decliningId === p.id}
+                              className="bg-green-600 hover:bg-green-700"
+                            >
+                              {paymentLoading === p.id ? "Processing..." : "Pay Now"}
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              onClick={() => handleDecline(p.id)}
+                              disabled={paymentLoading === p.id || decliningId === p.id}
+                            >
+                              {decliningId === p.id ? "Declining..." : "Decline"}
+                            </Button>
                           </div>
-                        ))
-                      )}
-                    </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })()}
+
+                  {p.status === "ACTIVE" && (
+                    <Card className="mt-3 border-green-200 bg-green-50">
+                      <CardContent className="pt-4">
+                        <p className="text-sm text-green-800">
+                          Policy is active. Coverage is in effect.
+                        </p>
+                      </CardContent>
+                    </Card>
                   )}
-                </div>
-              </div>
+
+                  <div className="mt-3">
+                    <Button
+                      variant="link"
+                      size="sm"
+                      onClick={() => loadPayments(p.id)}
+                      className="px-0"
+                    >
+                      View Payments
+                    </Button>
+                    {payments[p.id] && (
+                      <div className="mt-2 space-y-1 text-sm">
+                        {payments[p.id].length === 0 ? (
+                          <p className="text-muted-foreground">No payments yet.</p>
+                        ) : (
+                          payments[p.id].map((pay) => (
+                            <div
+                              key={pay.id}
+                              className="flex items-center gap-2 rounded-md border p-2"
+                            >
+                              <span>{formatCents(pay.amount_cents)}</span>
+                              <StatusBadge status={pay.status} />
+                              <span className="text-muted-foreground">
+                                {new Date(pay.created_at).toLocaleDateString()}
+                              </span>
+                              {pay.stripe_payment_intent_id.startsWith("SIMULATED") && (
+                                <Badge variant="outline">SIMULATED</Badge>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
             ))}
           </div>
         )}

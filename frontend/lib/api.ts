@@ -298,6 +298,9 @@ export const api = {
   me: () =>
     request<User>("/api/auth/me/"),
 
+  listCustomers: () =>
+    request<User[]>("/api/auth/customers/"),
+
   listBrokers: () =>
     request<Broker[]>("/api/brokers/"),
 
@@ -456,6 +459,9 @@ export const api = {
       method: "POST",
       body: JSON.stringify(cancellationDate ? { cancellation_date: cancellationDate } : {}),
     }),
+
+  declinePolicy: (policyId: number) =>
+    request<Policy>(`/api/policies/${policyId}/decline/`, { method: "POST" }),
 
   listPolicyRefunds: (policyId: number) =>
     request<RefundRecord[]>(`/api/payments/policy/${policyId}/refunds/`),

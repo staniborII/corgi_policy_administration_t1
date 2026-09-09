@@ -48,6 +48,7 @@ class Command(BaseCommand):
                     **{
                         username_field: identifier,
                         "password": password,
+                        "role": User.Role.STAFF,
                     }
                 )
         except IntegrityError:

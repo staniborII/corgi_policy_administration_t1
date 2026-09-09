@@ -256,3 +256,33 @@ def cancel_policy(*, policy_id, cancelled_by, cancellation_date=None):
     )
 
     return {"policy": policy, "refund": refund, **refund_data}
+
+
+@transaction.atomic
+def decline_policy(*, policy_id, declined_by):
+    """
+    Customer declines a policy before payment.
+    Only DRAFT or PENDING_PAYMENT policies can be declined.
+    No refund is needed since no payment has been made.
+    """
+    policy = Policy.objects.select_for_update().get(id=policy_id)
+
+    if policy.status not in (Policy.Status.DRAFT, Policy.Status.PENDING_PAYMENT):
+        raise PolicyError("Can only decline a policy that has not been paid")
+
+    if policy.customer_id != declined_by.id:
+        raise PolicyError("Only the policy customer can decline")
+
+    now = timezone.now()
+    policy.status = Policy.Status.CANCELLED
+    policy.save(update_fields=["status", "updated_at"])
+
+    PolicyEvent.objects.create(
+        policy=policy,
+        event_type=PolicyEvent.EventType.CANCELLED,
+        effective_at=now,
+        created_by=declined_by,
+        data={"reason": "Declined by customer before payment"},
+    )
+
+    return policy

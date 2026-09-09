@@ -12,39 +12,31 @@ import {
   ApiError,
 } from "@/lib/api";
 import Nav from "@/components/Nav";
+import { formatCents } from "@/lib/format";
+import { StatusBadge } from "@/components/status-badge";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-function formatCents(cents: number) {
-  return `$${(cents / 100).toFixed(2)}`;
-}
-
-function statusBadge(status: string) {
-  const colors: Record<string, string> = {
-    DRAFT: "#0275d8",
-    PENDING_PAYMENT: "#f0ad4e",
-    PENDING_CUSTOMER_APPROVAL: "#e67e22",
-    ACTIVE: "#5cb85c",
-    APPLIED: "#5cb85c",
-    APPROVED: "#28a745",
-    REVERSED: "#d9534f",
-    CANCELLED: "#d9534f",
-    EXPIRED: "#999",
-  };
-  return (
-    <span
-      style={{
-        padding: "2px 8px",
-        borderRadius: 4,
-        fontSize: "0.8rem",
-        backgroundColor: colors[status] || "#999",
-        color: "#fff",
-      }}
-    >
-      {status}
-    </span>
-  );
-}
 
 export default function StaffPolicyDetailPage() {
   return (
@@ -237,8 +229,22 @@ function StaffPolicyDetailContent() {
     return (
       <>
         <Nav />
-        <main style={{ padding: "1.5rem", fontFamily: "system-ui, sans-serif", maxWidth: 900, margin: "0 auto" }}>
-          <p>Loading...</p>
+        <main className="mx-auto max-w-5xl p-6">
+          <Skeleton className="mb-4 h-5 w-32" />
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-6 w-20" />
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-5 w-36" />
+            <Skeleton className="h-5 w-36" />
+          </div>
+          <Skeleton className="mt-6 h-px w-full" />
+          <Skeleton className="mt-6 h-32 w-full" />
+          <Skeleton className="mt-6 h-px w-full" />
+          <Skeleton className="mt-6 h-48 w-full" />
         </main>
       </>
     );
@@ -248,11 +254,20 @@ function StaffPolicyDetailContent() {
     return (
       <>
         <Nav />
-        <main style={{ padding: "1.5rem", fontFamily: "system-ui, sans-serif", maxWidth: 900, margin: "0 auto" }}>
-          <p style={{ color: "red" }}>{error || "Policy not found."}</p>
-          <button onClick={() => router.push("/staff/policies")} style={{ padding: "0.5rem 1rem" }}>
-            Back to Policies
-          </button>
+        <main className="mx-auto max-w-5xl p-6">
+          <Alert variant="destructive">
+            <AlertDescription>{error || "Policy not found."}</AlertDescription>
+          </Alert>
+          <div className="mt-4 flex gap-2">
+            <Button variant="outline" onClick={() => router.push("/staff/policies")}>
+              Back to Policies
+            </Button>
+            {error && (
+              <Button variant="secondary" onClick={loadData}>
+                Retry
+              </Button>
+            )}
+          </div>
         </main>
       </>
     );
@@ -261,337 +276,409 @@ function StaffPolicyDetailContent() {
   return (
     <>
       <Nav />
-      <main style={{ padding: "1.5rem", fontFamily: "system-ui, sans-serif", maxWidth: 900, margin: "0 auto" }}>
-        <button onClick={() => router.push("/staff/policies")} style={{ marginBottom: "1rem", cursor: "pointer", background: "none", border: "none", color: "#0275d8", fontSize: "0.9rem" }}>
+      <main className="mx-auto max-w-5xl p-6">
+        {/* Back link */}
+        <Button
+          variant="link"
+          className="mb-4 px-0 text-sm"
+          onClick={() => router.push("/staff/policies")}
+        >
           &larr; Back to Policies
-        </button>
+        </Button>
 
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h1 style={{ margin: 0 }}>{policy.policy_number}</h1>
-          {statusBadge(policy.status)}
+        {/* Policy header */}
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">{policy.policy_number}</h1>
+          <StatusBadge status={policy.status} />
         </div>
 
-        <div style={{ marginTop: "1rem", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", fontSize: "0.9rem" }}>
+        {/* Policy info grid */}
+        <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
           <div>Effective: {policy.effective_date}</div>
           <div>Expires: {policy.expiration_date}</div>
           <div>Premium: {formatCents(policy.premium_amount_cents)}</div>
           <div>Territory: {policy.coverage_territory}</div>
         </div>
 
-        {error && <p style={{ color: "red", marginTop: "0.5rem" }}>{error}</p>}
+        {/* Error display */}
+        {error && (
+          <Alert variant="destructive" className="mt-3">
+            <AlertDescription className="flex items-center justify-between">
+              {error}
+              <Button variant="outline" size="sm" onClick={loadData}>
+                Retry
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <Separator className="my-6" />
 
         {/* PDF Downloads */}
-        <div style={{ marginTop: "1.5rem", padding: "1rem", border: "1px solid #ddd", borderRadius: 4 }}>
-          <h3 style={{ marginTop: 0 }}>Documents</h3>
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            <a href={pdfUrl("declarations")} style={{ padding: "0.5rem 1rem", backgroundColor: "#0275d8", color: "#fff", borderRadius: 4, textDecoration: "none", fontSize: "0.85rem" }}>
-              Download Declarations
-            </a>
-            <a href={pdfUrl("endorsement-schedule")} style={{ padding: "0.5rem 1rem", backgroundColor: "#0275d8", color: "#fff", borderRadius: 4, textDecoration: "none", fontSize: "0.85rem" }}>
-              Download Endorsement Schedule
-            </a>
-          </div>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Documents</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              <a href={pdfUrl("declarations")} className={buttonVariants()}>
+                Download Declarations
+              </a>
+              <a href={pdfUrl("endorsement-schedule")} className={buttonVariants()}>
+                Download Endorsement Schedule
+              </a>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Separator className="my-6" />
 
         {/* As-Of View */}
-        <div style={{ marginTop: "1.5rem", padding: "1rem", border: "1px solid #ddd", borderRadius: 4 }}>
-          <h3 style={{ marginTop: 0 }}>Historical View (As-Of)</h3>
-          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-            <input
-              type="datetime-local"
-              value={asOfDate}
-              onChange={(e) => setAsOfDate(e.target.value)}
-              style={{ padding: "0.4rem" }}
-            />
-            <button onClick={handleAsOf} disabled={loadingAsOf} style={{ padding: "0.4rem 1rem" }}>
-              {loadingAsOf ? "Loading..." : "View As-Of"}
-            </button>
-            {asOfDate && (
-              <>
-                <a href={pdfUrl("declarations", asOfDate)} style={{ fontSize: "0.85rem", color: "#0275d8" }}>
-                  Declarations PDF (as-of)
-                </a>
-                <a href={pdfUrl("endorsement-schedule", asOfDate)} style={{ fontSize: "0.85rem", color: "#0275d8" }}>
-                  Schedule PDF (as-of)
-                </a>
-              </>
-            )}
-          </div>
-
-          {asOfSnapshot && (
-            <div style={{ marginTop: "0.75rem", padding: "0.75rem", backgroundColor: "#f0f7ff", borderRadius: 4 }}>
-              <p><strong>Policy state as of:</strong> {new Date(asOfSnapshot.as_of).toLocaleString()}</p>
-              <p>Effective Premium: {formatCents(asOfSnapshot.effective_premium_cents)}</p>
-              <p>Base Premium: {formatCents(asOfSnapshot.base_premium_cents)}</p>
-              {asOfSnapshot.endorsements.length > 0 && (
-                <div style={{ marginTop: "0.5rem" }}>
-                  <strong>Endorsements at that time:</strong>
-                  <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "0.25rem", fontSize: "0.85rem" }}>
-                    <thead>
-                      <tr style={{ borderBottom: "1px solid #ccc", textAlign: "left" }}>
-                        <th style={{ padding: "0.25rem" }}>#</th>
-                        <th style={{ padding: "0.25rem" }}>Type</th>
-                        <th style={{ padding: "0.25rem" }}>Effective</th>
-                        <th style={{ padding: "0.25rem" }}>Premium Change</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {asOfSnapshot.endorsements.map((e) => (
-                        <tr key={e.id} style={{ borderBottom: "1px solid #eee" }}>
-                          <td style={{ padding: "0.25rem" }}>{e.endorsement_number}</td>
-                          <td style={{ padding: "0.25rem" }}>{e.type}</td>
-                          <td style={{ padding: "0.25rem" }}>{e.effective_date}</td>
-                          <td style={{ padding: "0.25rem" }}>{formatCents(e.premium_change_cents)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              {asOfSnapshot.endorsements.length === 0 && (
-                <p style={{ fontSize: "0.85rem", color: "#666" }}>No endorsements at that point in time.</p>
+        <Card>
+          <CardHeader>
+            <CardTitle>Historical View (As-Of)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                type="datetime-local"
+                value={asOfDate}
+                onChange={(e) => setAsOfDate(e.target.value)}
+                className="w-auto"
+              />
+              <Button onClick={handleAsOf} disabled={loadingAsOf}>
+                {loadingAsOf ? "Loading..." : "View As-Of"}
+              </Button>
+              {asOfDate && (
+                <>
+                  <a href={pdfUrl("declarations", asOfDate)} className="text-sm text-primary underline-offset-4 hover:underline">
+                    Declarations PDF (as-of)
+                  </a>
+                  <a href={pdfUrl("endorsement-schedule", asOfDate)} className="text-sm text-primary underline-offset-4 hover:underline">
+                    Schedule PDF (as-of)
+                  </a>
+                </>
               )}
             </div>
-          )}
-        </div>
+
+            {asOfSnapshot && (
+              <div className="mt-3 rounded-md bg-blue-50 p-3 dark:bg-blue-950">
+                <p><strong>Policy state as of:</strong> {new Date(asOfSnapshot.as_of).toLocaleString()}</p>
+                <p>Effective Premium: {formatCents(asOfSnapshot.effective_premium_cents)}</p>
+                <p>Base Premium: {formatCents(asOfSnapshot.base_premium_cents)}</p>
+                {asOfSnapshot.endorsements.length > 0 && (
+                  <div className="mt-2">
+                    <strong>Endorsements at that time:</strong>
+                    <Table className="mt-1">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>#</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead>Effective</TableHead>
+                          <TableHead>Premium Change</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {asOfSnapshot.endorsements.map((e) => (
+                          <TableRow key={e.id}>
+                            <TableCell>{e.endorsement_number}</TableCell>
+                            <TableCell>{e.type}</TableCell>
+                            <TableCell>{e.effective_date}</TableCell>
+                            <TableCell>{formatCents(e.premium_change_cents)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+                {asOfSnapshot.endorsements.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No endorsements at that point in time.</p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Separator className="my-6" />
 
         {/* Endorsements Section */}
-        <div style={{ marginTop: "1.5rem" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <h2>Endorsements</h2>
+        <div>
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold">Endorsements</h2>
             {policy.status === "ACTIVE" && (
-              <button onClick={() => setShowCreate(!showCreate)} style={{ padding: "0.5rem 1rem" }}>
+              <Button
+                variant={showCreate ? "outline" : "default"}
+                onClick={() => setShowCreate(!showCreate)}
+              >
                 {showCreate ? "Cancel" : "Create Endorsement"}
-              </button>
+              </Button>
             )}
           </div>
 
           {showCreate && (
-            <form onSubmit={handleCreateEndorsement} style={{ border: "1px solid #ddd", padding: "1rem", marginBottom: "1rem", borderRadius: 4 }}>
-              <h3 style={{ marginTop: 0 }}>New Endorsement</h3>
-              <div style={{ marginBottom: "0.75rem" }}>
-                <label style={{ display: "block", marginBottom: 2, fontSize: "0.85rem" }}>Type</label>
-                <select
-                  value={endForm.endorsement_type}
-                  onChange={(e) => setEndForm({ ...endForm, endorsement_type: e.target.value })}
-                  style={{ width: "100%", padding: "0.4rem", boxSizing: "border-box" }}
-                >
-                  <option value="COVERAGE_LIMIT_CHANGE">Coverage Limit Change</option>
-                  <option value="ADDRESS_CORRECTION">Address Correction</option>
-                </select>
-              </div>
-              <div style={{ marginBottom: "0.75rem" }}>
-                <label style={{ display: "block", marginBottom: 2, fontSize: "0.85rem" }}>Effective Date</label>
-                <input
-                  type="date"
-                  value={endForm.effective_date}
-                  onChange={(e) => setEndForm({ ...endForm, effective_date: e.target.value })}
-                  required
-                  style={{ width: "100%", padding: "0.4rem", boxSizing: "border-box" }}
-                />
-              </div>
-              <div style={{ marginBottom: "0.75rem" }}>
-                <label style={{ display: "block", marginBottom: 2, fontSize: "0.85rem" }}>Annual Premium Delta (cents)</label>
-                <input
-                  type="number"
-                  value={endForm.annual_premium_delta_cents}
-                  onChange={(e) => setEndForm({ ...endForm, annual_premium_delta_cents: e.target.value })}
-                  required
-                  style={{ width: "100%", padding: "0.4rem", boxSizing: "border-box" }}
-                />
-                <p style={{ fontSize: "0.75rem", color: "#666", margin: "2px 0 0 0" }}>
-                  Positive = increase, negative = decrease. For address corrections, this is ignored.
-                </p>
-              </div>
-              <div style={{ marginBottom: "0.75rem" }}>
-                <label style={{ display: "block", marginBottom: 2, fontSize: "0.85rem" }}>Description</label>
-                <input
-                  type="text"
-                  value={endForm.description}
-                  onChange={(e) => setEndForm({ ...endForm, description: e.target.value })}
-                  required
-                  style={{ width: "100%", padding: "0.4rem", boxSizing: "border-box" }}
-                />
-              </div>
-              {createError && <p style={{ color: "red", fontSize: "0.85rem" }}>{createError}</p>}
-              <button type="submit" disabled={creating} style={{ padding: "0.5rem 1rem" }}>
-                {creating ? "Creating..." : "Create Endorsement"}
-              </button>
-            </form>
+            <Card className="mt-4 mb-4">
+              <CardHeader>
+                <CardTitle>New Endorsement</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleCreateEndorsement} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label>Type</Label>
+                    <select
+                      value={endForm.endorsement_type}
+                      onChange={(e) => setEndForm({ ...endForm, endorsement_type: e.target.value })}
+                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    >
+                      <option value="COVERAGE_LIMIT_CHANGE">Coverage Limit Change</option>
+                      <option value="ADDRESS_CORRECTION">Address Correction</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Effective Date</Label>
+                    <Input
+                      type="date"
+                      value={endForm.effective_date}
+                      onChange={(e) => setEndForm({ ...endForm, effective_date: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Annual Premium Delta (cents)</Label>
+                    <Input
+                      type="number"
+                      value={endForm.annual_premium_delta_cents}
+                      onChange={(e) => setEndForm({ ...endForm, annual_premium_delta_cents: e.target.value })}
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Positive = increase, negative = decrease. For address corrections, this is ignored.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Description</Label>
+                    <Input
+                      type="text"
+                      value={endForm.description}
+                      onChange={(e) => setEndForm({ ...endForm, description: e.target.value })}
+                      required
+                    />
+                  </div>
+                  {createError && (
+                    <Alert variant="destructive">
+                      <AlertDescription>{createError}</AlertDescription>
+                    </Alert>
+                  )}
+                  <Button type="submit" disabled={creating}>
+                    {creating ? "Creating..." : "Create Endorsement"}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
           )}
 
           {lastCharges && (
-            <div style={{ border: "1px solid #5cb85c", padding: "1rem", marginBottom: "1rem", borderRadius: 4, backgroundColor: "#f0fff0" }}>
-              <h4 style={{ marginTop: 0 }}>Endorsement Created — Charge Breakdown</h4>
-              <p>Pro-Rated Premium: {formatCents(lastCharges.premium_change_cents as number)}</p>
-              <p>Tax: {formatCents(lastCharges.total_tax_cents as number)}</p>
-              <p>Fees: {formatCents(lastCharges.total_fees_cents as number)}</p>
-              <p><strong>Total: {formatCents(lastCharges.total_cents as number)}</strong></p>
-              <button onClick={() => setLastCharges(null)} style={{ fontSize: "0.8rem" }}>Dismiss</button>
-            </div>
+            <Card className="mb-4 border-green-500 bg-green-50 dark:bg-green-950">
+              <CardHeader>
+                <CardTitle>Endorsement Created — Charge Breakdown</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p>Pro-Rated Premium: {formatCents(lastCharges.premium_change_cents as number)}</p>
+                <p>Tax: {formatCents(lastCharges.total_tax_cents as number)}</p>
+                <p>Fees: {formatCents(lastCharges.total_fees_cents as number)}</p>
+                <p><strong>Total: {formatCents(lastCharges.total_cents as number)}</strong></p>
+                <Button variant="ghost" size="sm" className="mt-2" onClick={() => setLastCharges(null)}>
+                  Dismiss
+                </Button>
+              </CardContent>
+            </Card>
           )}
 
-          {endorsements.length === 0 && <p style={{ color: "#666" }}>No endorsements yet.</p>}
+          {endorsements.length === 0 && (
+            <p className="mt-4 text-muted-foreground">No endorsements yet.</p>
+          )}
           {endorsements.length > 0 && (
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ borderBottom: "2px solid #ddd", textAlign: "left" }}>
-                  <th style={{ padding: "0.5rem" }}>Number</th>
-                  <th style={{ padding: "0.5rem" }}>Type</th>
-                  <th style={{ padding: "0.5rem" }}>Status</th>
-                  <th style={{ padding: "0.5rem" }}>Effective</th>
-                  <th style={{ padding: "0.5rem" }}>Premium Change</th>
-                  <th style={{ padding: "0.5rem" }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table className="mt-4">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Number</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Effective</TableHead>
+                  <TableHead>Premium Change</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {endorsements.map((e) => (
-                  <tr key={e.id} style={{ borderBottom: "1px solid #eee" }}>
-                    <td style={{ padding: "0.5rem", fontSize: "0.85rem" }}>
+                  <TableRow key={e.id}>
+                    <TableCell className="text-sm">
                       {e.endorsement_number}
                       {e.correction_of && (
-                        <span style={{ fontSize: "0.7rem", color: "#666", display: "block" }}>
+                        <span className="block text-xs text-muted-foreground">
                           (correction)
                         </span>
                       )}
-                    </td>
-                    <td style={{ padding: "0.5rem", fontSize: "0.85rem" }}>{e.endorsement_type}</td>
-                    <td style={{ padding: "0.5rem" }}>{statusBadge(e.status)}</td>
-                    <td style={{ padding: "0.5rem", fontSize: "0.85rem" }}>{e.effective_date}</td>
-                    <td style={{ padding: "0.5rem", fontSize: "0.85rem" }}>{formatCents(e.premium_change_cents)}</td>
-                    <td style={{ padding: "0.5rem" }}>
-                      <div style={{ display: "flex", gap: "0.25rem", flexWrap: "wrap" }}>
+                    </TableCell>
+                    <TableCell className="text-sm">{e.endorsement_type}</TableCell>
+                    <TableCell><StatusBadge status={e.status} /></TableCell>
+                    <TableCell className="text-sm">{e.effective_date}</TableCell>
+                    <TableCell className="text-sm">{formatCents(e.premium_change_cents)}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
                         {(e.status === "APPROVED" || e.status === "PENDING_PAYMENT") && (
-                          <button
+                          <Button
+                            size="sm"
                             onClick={() => handleApply(e.id)}
                             disabled={actionLoading === e.id}
-                            style={{ padding: "0.25rem 0.5rem", fontSize: "0.8rem", backgroundColor: "#5cb85c", color: "#fff", border: "none", borderRadius: 3, cursor: "pointer" }}
                           >
                             {actionLoading === e.id ? "..." : "Apply"}
-                          </button>
+                          </Button>
                         )}
                         {e.status === "APPLIED" && (
-                          <button
+                          <Button
+                            size="sm"
+                            variant="secondary"
                             onClick={() => { setShowCorrect(e.id); setCorrectDate(""); setCorrectError(""); }}
-                            style={{ padding: "0.25rem 0.5rem", fontSize: "0.8rem", backgroundColor: "#f0ad4e", color: "#fff", border: "none", borderRadius: 3, cursor: "pointer" }}
                           >
                             Correct
-                          </button>
+                          </Button>
                         )}
                       </div>
 
                       {showCorrect === e.id && (
-                        <div style={{ marginTop: "0.5rem", padding: "0.5rem", border: "1px solid #f0ad4e", borderRadius: 4, fontSize: "0.85rem" }}>
-                          <label style={{ display: "block", marginBottom: 2 }}>Corrected Effective Date:</label>
-                          <input
-                            type="date"
-                            value={correctDate}
-                            onChange={(ev) => setCorrectDate(ev.target.value)}
-                            style={{ padding: "0.3rem", marginRight: "0.5rem" }}
-                          />
-                          <button
-                            onClick={() => handleCorrect(e.id)}
-                            disabled={actionLoading === e.id || !correctDate}
-                            style={{ padding: "0.25rem 0.5rem", fontSize: "0.8rem" }}
-                          >
-                            {actionLoading === e.id ? "..." : "Submit Correction"}
-                          </button>
-                          <button
-                            onClick={() => setShowCorrect(null)}
-                            style={{ padding: "0.25rem 0.5rem", fontSize: "0.8rem", marginLeft: "0.25rem" }}
-                          >
-                            Cancel
-                          </button>
-                          {correctError && <p style={{ color: "red", margin: "0.25rem 0 0 0" }}>{correctError}</p>}
+                        <div className="mt-2 rounded-md border border-yellow-400 p-2 text-sm">
+                          <Label className="mb-1 block">Corrected Effective Date:</Label>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Input
+                              type="date"
+                              value={correctDate}
+                              onChange={(ev) => setCorrectDate(ev.target.value)}
+                              className="w-auto"
+                            />
+                            <Button
+                              size="sm"
+                              onClick={() => handleCorrect(e.id)}
+                              disabled={actionLoading === e.id || !correctDate}
+                            >
+                              {actionLoading === e.id ? "..." : "Submit Correction"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setShowCorrect(null)}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                          {correctError && (
+                            <Alert variant="destructive" className="mt-2">
+                              <AlertDescription>{correctError}</AlertDescription>
+                            </Alert>
+                          )}
                         </div>
                       )}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           )}
         </div>
 
+        <Separator className="my-6" />
+
         {/* Cancellation Section */}
         {policy.status === "ACTIVE" && (
-          <div style={{ marginTop: "1.5rem", padding: "1rem", border: "1px solid #d9534f", borderRadius: 4 }}>
-            <h3 style={{ marginTop: 0, color: "#d9534f" }}>Cancel Policy</h3>
-            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-              <label style={{ fontSize: "0.85rem" }}>Cancellation Date (optional):</label>
-              <input
-                type="date"
-                value={cancelDate}
-                onChange={(e) => setCancelDate(e.target.value)}
-                style={{ padding: "0.4rem" }}
-              />
-              <button
-                onClick={handleCancel}
-                disabled={cancelling}
-                style={{ padding: "0.5rem 1rem", backgroundColor: "#d9534f", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
-              >
-                {cancelling ? "Cancelling..." : "Cancel Policy"}
-              </button>
-            </div>
-          </div>
+          <Card className="border-destructive">
+            <CardHeader>
+              <CardTitle className="text-destructive">Cancel Policy</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap items-center gap-2">
+                <Label className="text-sm">Cancellation Date (optional):</Label>
+                <Input
+                  type="date"
+                  value={cancelDate}
+                  onChange={(e) => setCancelDate(e.target.value)}
+                  className="w-auto"
+                />
+                <Button
+                  variant="destructive"
+                  onClick={handleCancel}
+                  disabled={cancelling}
+                >
+                  {cancelling ? "Cancelling..." : "Cancel Policy"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {cancelResult && (
-          <div style={{ marginTop: "1rem", padding: "1rem", border: "1px solid #5cb85c", borderRadius: 4, backgroundColor: "#f0fff0" }}>
-            <h4 style={{ marginTop: 0 }}>Cancellation Complete</h4>
-            <p>Unearned Premium: {formatCents(cancelResult.unearned_premium_cents as number)}</p>
-            <p>Refundable Tax: {formatCents(cancelResult.total_refundable_tax_cents as number)}</p>
-            <p>Refundable Fees: {formatCents(cancelResult.total_refundable_fees_cents as number)}</p>
-            <p><strong>Total Refund: {formatCents(cancelResult.total_refund_cents as number)}</strong></p>
-            <p>Commission Clawback: {formatCents(cancelResult.commission_clawback_cents as number)}</p>
-            <button onClick={() => setCancelResult(null)} style={{ fontSize: "0.8rem" }}>Dismiss</button>
-          </div>
+          <Card className="mt-4 border-green-500 bg-green-50 dark:bg-green-950">
+            <CardHeader>
+              <CardTitle>Cancellation Complete</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p>Unearned Premium: {formatCents(cancelResult.unearned_premium_cents as number)}</p>
+              <p>Refundable Tax: {formatCents(cancelResult.total_refundable_tax_cents as number)}</p>
+              <p>Refundable Fees: {formatCents(cancelResult.total_refundable_fees_cents as number)}</p>
+              <p><strong>Total Refund: {formatCents(cancelResult.total_refund_cents as number)}</strong></p>
+              <p>Commission Clawback: {formatCents(cancelResult.commission_clawback_cents as number)}</p>
+              <Button variant="ghost" size="sm" className="mt-2" onClick={() => setCancelResult(null)}>
+                Dismiss
+              </Button>
+            </CardContent>
+          </Card>
         )}
 
         {/* Refunds Section */}
         {refunds.length > 0 && (
-          <div style={{ marginTop: "1.5rem" }}>
-            <h2>Refunds</h2>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ borderBottom: "2px solid #ddd", textAlign: "left" }}>
-                  <th style={{ padding: "0.5rem" }}>ID</th>
-                  <th style={{ padding: "0.5rem" }}>Amount</th>
-                  <th style={{ padding: "0.5rem" }}>Status</th>
-                  <th style={{ padding: "0.5rem" }}>Stripe Ref</th>
-                  <th style={{ padding: "0.5rem" }}>Reason</th>
-                  <th style={{ padding: "0.5rem" }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {refunds.map((r) => (
-                  <tr key={r.id} style={{ borderBottom: "1px solid #eee" }}>
-                    <td style={{ padding: "0.5rem", fontSize: "0.85rem" }}>{r.id}</td>
-                    <td style={{ padding: "0.5rem", fontSize: "0.85rem" }}>{formatCents(r.amount_cents)}</td>
-                    <td style={{ padding: "0.5rem" }}>{statusBadge(r.status)}</td>
-                    <td style={{ padding: "0.5rem", fontSize: "0.75rem", fontFamily: "monospace" }}>
-                      {r.stripe_refund_id}
-                      {r.stripe_refund_id.startsWith("SIMULATED") && (
-                        <span style={{ color: "#f0ad4e", fontWeight: "bold", marginLeft: 4 }}>SIMULATED</span>
-                      )}
-                    </td>
-                    <td style={{ padding: "0.5rem", fontSize: "0.85rem" }}>{r.reason}</td>
-                    <td style={{ padding: "0.5rem" }}>
-                      {r.status === "PENDING" && r.stripe_refund_id.startsWith("SIMULATED") && (
-                        <button
-                          onClick={() => handleSimulateRefund(r.id)}
-                          disabled={simulatingRefund}
-                          style={{ padding: "0.25rem 0.5rem", fontSize: "0.8rem", backgroundColor: "#5cb85c", color: "#fff", border: "none", borderRadius: 3, cursor: "pointer" }}
-                        >
-                          {simulatingRefund ? "..." : "Simulate Success"}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <Separator className="my-6" />
+            <div>
+              <h2 className="text-xl font-semibold">Refunds</h2>
+              <Table className="mt-4">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>ID</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Stripe Ref</TableHead>
+                    <TableHead>Reason</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {refunds.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell className="text-sm">{r.id}</TableCell>
+                      <TableCell className="text-sm">{formatCents(r.amount_cents)}</TableCell>
+                      <TableCell><StatusBadge status={r.status} /></TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {r.stripe_refund_id}
+                        {r.stripe_refund_id.startsWith("SIMULATED") && (
+                          <span className="ml-1 font-bold text-yellow-500">SIMULATED</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm">{r.reason}</TableCell>
+                      <TableCell>
+                        {r.status === "PENDING" && r.stripe_refund_id.startsWith("SIMULATED") && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleSimulateRefund(r.id)}
+                            disabled={simulatingRefund}
+                          >
+                            {simulatingRefund ? "..." : "Simulate Success"}
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
         )}
       </main>
     </>

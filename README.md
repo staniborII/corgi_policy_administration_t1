@@ -4,7 +4,7 @@ A focused policy-administration system for Commercial General Liability insuranc
 
 ## Status
 
-Milestone 9 — AWS infrastructure foundation.
+Milestone 10 — Demo hardening (seed data, UI polish, observability).
 
 ## Structure
 
@@ -36,7 +36,7 @@ cp .env.example .env
 # Run migrations
 uv run python manage.py migrate
 
-# Seed demo data (users, chart of accounts, TX tax rules)
+# Seed demo data (users, broker, policy, endorsements, claim, reconciliation)
 uv run python manage.py seed_demo
 
 # Create a superuser (reads DJANGO_SUPERUSER_USERNAME/PASSWORD from .env)
@@ -104,6 +104,52 @@ Connection verified: postgresql
 ```
 
 Both databases use the same Django ORM — no code changes needed when switching.
+
+### Stripe integration (test mode)
+
+By default, the backend runs in **simulated mode** (no Stripe keys needed) — payments complete instantly without real Stripe. To test with real Stripe checkout and webhooks:
+
+1. **Create a Stripe account** at [dashboard.stripe.com](https://dashboard.stripe.com) (starts in test mode).
+
+2. **Get your test API keys** from **Developers → API keys**:
+   - Secret key (`sk_test_...`)
+   - Publishable key (`pk_test_...`)
+
+3. **Install the Stripe CLI**:
+   ```bash
+   # Windows
+   winget install Stripe.StripeCLI
+
+   # macOS
+   brew install stripe/stripe-cli/stripe
+
+   # Linux — see https://stripe.com/docs/stripe-cli
+   ```
+
+4. **Forward webhooks to your local server**:
+   ```bash
+   stripe login
+   stripe listen --forward-to http://localhost:8000/api/integrations/webhooks/stripe/
+   ```
+   This prints a webhook signing secret (`whsec_...`) — copy it.
+
+5. **Add the keys to `backend/.env`**:
+   ```bash
+   STRIPE_SECRET_KEY=sk_test_...
+   STRIPE_PUBLISHABLE_KEY=pk_test_...
+   STRIPE_WEBHOOK_SECRET=whsec_...
+   ```
+
+6. **Restart the backend** and keep the `stripe listen` terminal running.
+
+**Testing the flow:**
+- Log in as `customer1/custpass1` and click **Pay Now** on a pending policy
+- You'll be redirected to Stripe's hosted checkout page
+- Use test card `4242 4242 4242 4242`, any future expiry, any CVC
+- Stripe sends a webhook → `stripe listen` forwards it → backend activates the policy
+- You're redirected back to the success page
+
+Without Stripe keys, the **Pay Now** button completes payment instantly via simulation (no redirect).
 
 ### VS Code setup
 
@@ -222,7 +268,7 @@ Rules:
 
 ### Seeding demo data
 
-After running migrations, seed the chart of accounts, demo users, and Texas surplus-lines tax/fee rules:
+After running migrations, seed a complete demo environment:
 
 ```bash
 cd backend
@@ -234,6 +280,14 @@ This creates:
 - **Customer user**: customer1/custpass1
 - **TX tax rules**: Surplus Lines Premium Tax (4.85%), SLTX Stamping Fee (0.04%)
 - **Chart of accounts**: 14 ledger accounts (including Stamping Fee Payable)
+- **Broker**: Acme Insurance Brokers (KYB approved, 15% commission)
+- **Policy**: $120,000 CGL policy (active, paid via simulated Stripe)
+- **Endorsements**: Coverage limit increase ($10K/yr, pro-rated) + address correction
+- **Claim**: Water damage with $200K reserve, $75K settled payout (maker-checker approved)
+- **Reconciliation**: Run with break detection
+- **Broker statement**: Annual statement for the broker
+
+The seed is idempotent — re-running it skips the demo scenario if it already exists.
 
 ## Key documents
 

@@ -11,7 +11,7 @@ Tests cover:
 - Policy state transitions (DRAFT -> PENDING_PAYMENT -> ACTIVE)
 """
 
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 from rest_framework.test import APIClient
@@ -103,10 +103,11 @@ def ledger_accounts(db):
 
 @pytest.fixture
 def draft_policy(staff_user, customer_user, approved_broker, tx_rules, ledger_accounts):
+    tomorrow = date.today() + timedelta(days=1)
     policy, charges = issue_policy(
         customer=customer_user,
         broker_id=approved_broker.id,
-        effective_date=date(2025, 6, 1),
+        effective_date=tomorrow,
         premium_amount_cents=100000,
         coverage_territory="TX",
         created_by=staff_user,
@@ -146,6 +147,13 @@ class TestPaymentCheckout:
         draft_policy.save()
 
         with pytest.raises(PaymentError, match="not in a payable state"):
+            create_checkout_for_policy(policy_id=draft_policy.id, requested_by=staff_user)
+
+    def test_past_effective_date_not_payable(self, draft_policy, staff_user):
+        draft_policy.effective_date = date.today() - timedelta(days=1)
+        draft_policy.save()
+
+        with pytest.raises(PaymentError, match="effective date.*has passed"):
             create_checkout_for_policy(policy_id=draft_policy.id, requested_by=staff_user)
 
 
@@ -296,7 +304,7 @@ class TestCommissionRounding:
         policy, _ = issue_policy(
             customer=customer_user,
             broker_id=broker.id,
-            effective_date=date(2025, 6, 1),
+            effective_date=date.today() + timedelta(days=1),
             premium_amount_cents=77777,
             coverage_territory="TX",
             created_by=staff,

@@ -5,22 +5,20 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { api, type Broker, ApiError } from "@/lib/api";
 import Nav from "@/components/Nav";
-
-function statusBadge(status: string) {
-  const colors: Record<string, string> = {
-    PENDING_KYB: "#f0ad4e",
-    APPROVED: "#5cb85c",
-    REJECTED: "#d9534f",
-  };
-  return (
-    <span style={{
-      padding: "2px 8px", borderRadius: 4, fontSize: "0.8rem",
-      backgroundColor: colors[status] || "#999", color: "#fff",
-    }}>
-      {status}
-    </span>
-  );
-}
+import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function BrokersPage() {
   const { user, loading } = useAuth();
@@ -98,92 +96,125 @@ export default function BrokersPage() {
   return (
     <>
       <Nav />
-      <main style={{ padding: "1.5rem", fontFamily: "system-ui, sans-serif", maxWidth: 900, margin: "0 auto" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h1>Brokers</h1>
-          <button onClick={() => setShowCreate(!showCreate)} style={{ padding: "0.5rem 1rem" }}>
+      <main className="mx-auto max-w-5xl p-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">Brokers</h1>
+          <Button
+            variant={showCreate ? "outline" : "default"}
+            onClick={() => setShowCreate(!showCreate)}
+          >
             {showCreate ? "Cancel" : "Create Broker"}
-          </button>
+          </Button>
         </div>
 
         {showCreate && (
-          <form onSubmit={handleCreate} style={{ border: "1px solid #ddd", padding: "1rem", marginBottom: "1.5rem", borderRadius: 4 }}>
-            <h3>New Broker</h3>
-            {[
-              { label: "Company Name", key: "company_name" },
-              { label: "Commission Rate (bps)", key: "commission_rate_bps" },
-              { label: "Contact Email", key: "contact_email" },
-              { label: "Contact First Name", key: "contact_first_name" },
-              { label: "Contact Last Name", key: "contact_last_name" },
-            ].map(({ label, key }) => (
-              <div key={key} style={{ marginBottom: "0.75rem" }}>
-                <label style={{ display: "block", marginBottom: 2, fontSize: "0.85rem" }}>{label}</label>
-                <input
-                  value={form[key as keyof typeof form]}
-                  onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-                  required
-                  style={{ width: "100%", padding: "0.4rem", boxSizing: "border-box" }}
-                />
-              </div>
-            ))}
-            {createError && <p style={{ color: "red", fontSize: "0.85rem" }}>{createError}</p>}
-            <button type="submit" disabled={creating} style={{ padding: "0.5rem 1rem" }}>
-              {creating ? "Creating..." : "Create"}
-            </button>
-          </form>
+          <Card className="mt-4 mb-6">
+            <CardHeader>
+              <CardTitle>New Broker</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleCreate} className="space-y-4">
+                {[
+                  { label: "Company Name", key: "company_name" },
+                  { label: "Commission Rate (bps)", key: "commission_rate_bps" },
+                  { label: "Contact Email", key: "contact_email" },
+                  { label: "Contact First Name", key: "contact_first_name" },
+                  { label: "Contact Last Name", key: "contact_last_name" },
+                ].map(({ label, key }) => (
+                  <div key={key} className="space-y-1">
+                    <Label htmlFor={key}>{label}</Label>
+                    <Input
+                      id={key}
+                      value={form[key as keyof typeof form]}
+                      onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                      required
+                    />
+                  </div>
+                ))}
+                {createError && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{createError}</AlertDescription>
+                  </Alert>
+                )}
+                <Button type="submit" disabled={creating}>
+                  {creating ? "Creating..." : "Create"}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
         )}
 
-        {error && <p style={{ color: "red" }}>{error}</p>}
-        {loadingData && <p>Loading...</p>}
+        {error && (
+          <Alert variant="destructive" className="mt-4">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        {loadingData && <p className="mt-4 text-muted-foreground">Loading...</p>}
 
-        {!loadingData && brokers.length === 0 && <p>No brokers found.</p>}
+        {!loadingData && brokers.length === 0 && (
+          <p className="mt-4 text-muted-foreground">No brokers found.</p>
+        )}
 
         {brokers.length > 0 && (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ borderBottom: "2px solid #ddd", textAlign: "left" }}>
-                <th style={{ padding: "0.5rem" }}>Company</th>
-                <th style={{ padding: "0.5rem" }}>Commission</th>
-                <th style={{ padding: "0.5rem" }}>KYB Status</th>
-                <th style={{ padding: "0.5rem" }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table className="mt-4">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Company</TableHead>
+                <TableHead>Commission</TableHead>
+                <TableHead>KYB Status</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {brokers.map((b) => (
-                <tr key={b.id} style={{ borderBottom: "1px solid #eee", cursor: "pointer" }}>
-                  <td style={{ padding: "0.5rem" }} onClick={() => setSelectedBroker(b)}>{b.company_name}</td>
-                  <td style={{ padding: "0.5rem" }}>{(b.commission_rate_bps / 100).toFixed(2)}%</td>
-                  <td style={{ padding: "0.5rem" }}>{statusBadge(b.status)}</td>
-                  <td style={{ padding: "0.5rem" }}>
+                <TableRow key={b.id} className="cursor-pointer">
+                  <TableCell onClick={() => setSelectedBroker(b)} className="font-medium">
+                    {b.company_name}
+                  </TableCell>
+                  <TableCell>{(b.commission_rate_bps / 100).toFixed(2)}%</TableCell>
+                  <TableCell>
+                    <StatusBadge status={b.status} />
+                  </TableCell>
+                  <TableCell>
                     {b.status === "PENDING_KYB" && (
-                      <button onClick={() => handleInitiateKyb(b.id)} style={{ fontSize: "0.85rem" }}>
+                      <Button variant="outline" size="sm" onClick={() => handleInitiateKyb(b.id)}>
                         Initiate KYB
-                      </button>
+                      </Button>
                     )}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
 
         {selectedBroker && (
-          <div style={{ marginTop: "2rem", border: "1px solid #ddd", padding: "1rem", borderRadius: 4 }}>
-            <h2>{selectedBroker.company_name}</h2>
-            <p>Status: {statusBadge(selectedBroker.status)}</p>
-            <p>Commission: {(selectedBroker.commission_rate_bps / 100).toFixed(2)}%</p>
-            {selectedBroker.latest_kyb && (
-              <div style={{ marginTop: "0.5rem" }}>
-                <h3>Latest KYB Verification</h3>
-                <p>Inquiry ID: {selectedBroker.latest_kyb.persona_inquiry_id}</p>
-                <p>Status: {selectedBroker.latest_kyb.status}</p>
-                {selectedBroker.latest_kyb.persona_inquiry_id.startsWith("SIMULATED") && (
-                  <p style={{ color: "#f0ad4e", fontWeight: "bold" }}>SIMULATED — No real Persona credentials configured</p>
-                )}
-              </div>
-            )}
-            <button onClick={() => setSelectedBroker(null)} style={{ marginTop: "0.5rem" }}>Close</button>
-          </div>
+          <Card className="mt-8">
+            <CardHeader>
+              <CardTitle>{selectedBroker.company_name}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <p className="flex items-center gap-2">
+                Status: <StatusBadge status={selectedBroker.status} />
+              </p>
+              <p>Commission: {(selectedBroker.commission_rate_bps / 100).toFixed(2)}%</p>
+              {selectedBroker.latest_kyb && (
+                <div className="mt-2 space-y-1">
+                  <h3 className="text-lg font-semibold">Latest KYB Verification</h3>
+                  <p>Inquiry ID: {selectedBroker.latest_kyb.persona_inquiry_id}</p>
+                  <p>Status: {selectedBroker.latest_kyb.status}</p>
+                  {selectedBroker.latest_kyb.persona_inquiry_id.startsWith("SIMULATED") && (
+                    <p className="font-bold text-amber-500">
+                      SIMULATED — No real Persona credentials configured
+                    </p>
+                  )}
+                </div>
+              )}
+              <Button variant="outline" className="mt-2" onClick={() => setSelectedBroker(null)}>
+                Close
+              </Button>
+            </CardContent>
+          </Card>
         )}
       </main>
     </>

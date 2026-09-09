@@ -1,7 +1,11 @@
+import logging
+
 from django.db import models, transaction
 from django.utils import timezone
 
 from apps.ledger.models import JournalEntry, JournalLine, LedgerAccount
+
+logger = logging.getLogger(__name__)
 
 
 class LedgerError(Exception):
@@ -80,6 +84,13 @@ def post_journal_entry(*, effective_at, lines, memo="", idempotency_key=None):
             entry_type=line_data["entry_type"],
         )
 
+    logger.info(
+        "Journal entry posted: entry_id=%s, key=%s, lines=%s, debits=%s",
+        entry.id,
+        idempotency_key,
+        len(lines),
+        total_debits,
+    )
     return entry
 
 
@@ -125,6 +136,7 @@ def reverse_journal_entry(*, entry_id, memo="", effective_at=None, idempotency_k
             entry_type=flipped,
         )
 
+    logger.info(f"Reversal posted: original_entry_id={original.id}, reversal_entry_id={reversal.id}")
     return reversal
 
 

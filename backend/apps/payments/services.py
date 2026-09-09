@@ -1,5 +1,6 @@
 import logging
 import uuid
+from datetime import date
 
 from django.conf import settings
 from django.db import transaction
@@ -29,6 +30,12 @@ def create_checkout_for_policy(*, policy_id, requested_by):
 
     if policy.status not in (Policy.Status.DRAFT, Policy.Status.PENDING_PAYMENT):
         raise PaymentError(f"Policy {policy.policy_number} is not in a payable state (status: {policy.status})")
+
+    if policy.effective_date < date.today():
+        raise PaymentError(
+            f"Policy {policy.policy_number} effective date ({policy.effective_date}) has passed. "
+            "Staff must re-issue with a new effective date."
+        )
 
     if policy.status == Policy.Status.PENDING_PAYMENT:
         existing = Payment.objects.filter(policy=policy, status=Payment.Status.PENDING).first()
@@ -86,6 +93,13 @@ def create_checkout_for_policy(*, policy_id, requested_by):
                 "simulated": checkout["simulated"],
             },
         )
+
+    logger.info(
+        "Checkout created: policy_id=%s, amount=%s, ref=%s",
+        policy_id,
+        total_cents,
+        checkout["session_id"],
+    )
 
     return {
         "payment_id": payment.id,
@@ -192,6 +206,13 @@ def handle_payment_success(*, payment_id, stripe_payment_intent_id=""):
         },
     )
 
+    logger.info(
+        "Payment success: payment_id=%s, policy_id=%s, ref=%s",
+        payment_id,
+        policy.id,
+        stripe_payment_intent_id,
+    )
+
     return payment
 
 
@@ -284,6 +305,8 @@ def handle_refund_success(*, refund_id):
             memo=f"Cancellation refund for {policy.policy_number}",
             idempotency_key=f"cancellation-refund-{refund.id}",
         )
+
+    logger.info(f"Refund success handled: refund_id={refund_id}, provider_reference={refund.stripe_refund_id}")
 
     commission_clawback = charges.get("commission_clawback_cents", 0)
     if commission_clawback > 0:

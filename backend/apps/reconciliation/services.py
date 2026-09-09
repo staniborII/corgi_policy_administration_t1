@@ -165,6 +165,8 @@ def run_reconciliation(*, run_date=None):
     now = timezone.now()
     recon_run = ReconciliationRun.objects.create(run_date=run_date, status=ReconciliationRun.Status.RUNNING)
 
+    logger.info(f"Reconciliation run started: run_id={recon_run.id}")
+
     try:
         with transaction.atomic():
             breaks_found = _reconcile_records(recon_run, now)
@@ -175,6 +177,12 @@ def run_reconciliation(*, run_date=None):
             "breaks_found": breaks_found,
         }
         recon_run.save(update_fields=["status", "completed_at", "summary"])
+
+        logger.info(
+            "Reconciliation completed: run_id=%s, breaks=%s",
+            recon_run.id,
+            breaks_found,
+        )
 
     except Exception as exc:
         logger.exception("Reconciliation run %s failed", recon_run.id)
@@ -217,6 +225,11 @@ def _reconcile_records(recon_run, now):
                 expected_amount_cents=payment.amount_cents,
                 first_seen_at=now,
             )
+            logger.warning(
+                "Break: MISSING_IN_PROVIDER amount=%s ref=%s",
+                payment.amount_cents,
+                pi_id,
+            )
             breaks_found += 1
             continue
 
@@ -232,6 +245,7 @@ def _reconcile_records(recon_run, now):
                 external_reference=pi_id,
                 first_seen_at=now,
             )
+            logger.warning("Break: STATUS_MISMATCH ref=%s", pi_id)
             breaks_found += 1
 
         if payment.amount_cents != provider_data["amount"]:
@@ -248,6 +262,11 @@ def _reconcile_records(recon_run, now):
                 actual_amount_cents=provider_data["amount"],
                 first_seen_at=now,
             )
+            logger.warning(
+                "Break: AMOUNT_MISMATCH amount=%s ref=%s",
+                payment.amount_cents,
+                pi_id,
+            )
             breaks_found += 1
 
     for pi_id, provider_data in provider_payments.items():
@@ -260,6 +279,11 @@ def _reconcile_records(recon_run, now):
                 external_reference=pi_id,
                 actual_amount_cents=provider_data["amount"],
                 first_seen_at=now,
+            )
+            logger.warning(
+                "Break: MISSING_IN_LEDGER amount=%s ref=%s",
+                provider_data["amount"],
+                pi_id,
             )
             breaks_found += 1
 
@@ -287,6 +311,11 @@ def _reconcile_records(recon_run, now):
                 expected_amount_cents=refund.amount_cents,
                 first_seen_at=now,
             )
+            logger.warning(
+                "Break: MISSING_IN_PROVIDER amount=%s ref=%s",
+                refund.amount_cents,
+                rf_id,
+            )
             breaks_found += 1
 
         elif refund.amount_cents != provider_refunds[rf_id]["amount"]:
@@ -303,6 +332,11 @@ def _reconcile_records(recon_run, now):
                 actual_amount_cents=provider_refunds[rf_id]["amount"],
                 first_seen_at=now,
             )
+            logger.warning(
+                "Break: AMOUNT_MISMATCH amount=%s ref=%s",
+                refund.amount_cents,
+                rf_id,
+            )
             breaks_found += 1
 
     for rf_id, provider_data in provider_refunds.items():
@@ -315,6 +349,11 @@ def _reconcile_records(recon_run, now):
                 external_reference=rf_id,
                 actual_amount_cents=provider_data["amount"],
                 first_seen_at=now,
+            )
+            logger.warning(
+                "Break: MISSING_IN_LEDGER amount=%s ref=%s",
+                provider_data["amount"],
+                rf_id,
             )
             breaks_found += 1
 

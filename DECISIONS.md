@@ -353,3 +353,24 @@ Format:
 - **Assumption / evidence:** The FlexxyDrive reference stack uses public ALBs for the same reason. CloudFront VPC origins (alternative) require additional setup and are less mature.
 - **Alternatives considered:** CloudFront VPC origins (newer feature, more complex), keep internal + VPN for API access (blocks webhook providers).
 - **Impact / follow-up:** ALB is publicly accessible. WAF can be added to ALB for direct-access protection in production.
+
+## 2026-09-09 18:30 - M10: Upgraded seed script with full demo lifecycle
+- **Decision:** The `seed_demo` management command now creates a complete demo scenario: approved broker (KYB via simulated Persona webhook), active paid policy ($120K premium), two endorsements (coverage limit change + address correction), a claim with settled $75K payout (maker-checker approved), reconciliation run, and broker statement.
+- **Reason:** A believable demo requires data that exercises every major domain path. Reviewers can open the app and see realistic state without manual setup.
+- **Assumption / evidence:** All service functions are used via their public APIs, no raw ORM writes. The seed is idempotent (skips if Acme broker already exists). Transaction-atomic ensures clean rollback on failure.
+- **Alternatives considered:** Fixtures (brittle, hard to maintain), manual data entry (slow, error-prone).
+- **Impact / follow-up:** Run `uv run python manage.py seed_demo` after migrations for a complete demo environment.
+
+## 2026-09-09 18:30 - M10: Structured logging across business services
+- **Decision:** Added `import logging` and `logger.info()`/`logger.warning()` calls to all key service modules: brokers, claims, ledger, payments, reconciliation, and integrations (webhook views). Django LOGGING config in settings.py routes these through a structured formatter.
+- **Reason:** Observability is essential for debugging production issues. Structured log lines with IDs (policy, payment, claim, broker) enable log search and correlation. LOG_LEVEL env var controls verbosity per environment.
+- **Assumption / evidence:** Uses Python stdlib logging (no extra dependencies). `logger.info` for successful operations, `logger.warning` for edge cases (signature failures, reconciliation breaks, payout returns).
+- **Alternatives considered:** structlog (more features, but extra dependency for trial), JSON formatter (overkill for trial, structured text is human-readable).
+- **Impact / follow-up:** In production, LOG_LEVEL=WARNING reduces noise. Log output visible in ECS CloudWatch logs.
+
+## 2026-09-09 18:30 - M10: UI hardening with skeleton loading and retry
+- **Decision:** Replaced "Loading..." text with Skeleton components on 4 key screens (staff policy detail, customer policy detail, customer policies list, staff reconciliation). Added Retry buttons to error states across all 4 screens.
+- **Reason:** Skeleton loading states provide better perceived performance and visual feedback. Retry buttons let users recover from transient network errors without refreshing the page.
+- **Assumption / evidence:** shadcn/ui Skeleton component already existed in the project. All screens already had error states (Alert with destructive variant) — Retry button was the missing piece.
+- **Alternatives considered:** Spinner (less polished than skeletons), auto-retry with backoff (adds complexity, user may not want automatic retries).
+- **Impact / follow-up:** All major screens now have three visual states: loading (skeletons), error (alert + retry), and empty (contextual message).

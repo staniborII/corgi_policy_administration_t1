@@ -1,34 +1,19 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { api, type ClaimRecord, type Policy } from "@/lib/api";
 import Nav from "@/components/Nav";
-
-function formatCents(cents: number) {
-  return `$${(cents / 100).toFixed(2)}`;
-}
-
-function statusBadge(s: string) {
-  const colors: Record<string, string> = {
-    OPEN: "#0275d8",
-    UNDER_REVIEW: "#f0ad4e",
-    RESERVED: "#5bc0de",
-    PAYMENT_PENDING: "#f0ad4e",
-    PARTIALLY_PAID: "#0275d8",
-    PAID: "#5cb85c",
-    CLOSED: "#999",
-  };
-  return (
-    <span style={{
-      padding: "2px 8px", borderRadius: 4, fontSize: "0.8rem",
-      backgroundColor: colors[s] || "#999", color: "#fff",
-    }}>
-      {s.replace(/_/g, " ")}
-    </span>
-  );
-}
+import { formatCents } from "@/lib/format";
+import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
 
 function ClaimsContent() {
   const { user, loading } = useAuth();
@@ -42,7 +27,6 @@ function ClaimsContent() {
   const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const fetched = useRef(false);
 
   const [formPolicyId, setFormPolicyId] = useState(policyId || "");
   const [dateOfLoss, setDateOfLoss] = useState("");
@@ -57,9 +41,9 @@ function ClaimsContent() {
   }, [user, loading, router]);
 
   useEffect(() => {
-    if (loading || !user || fetched.current) return;
-    fetched.current = true;
+    if (loading || !user) return;
     let cancelled = false;
+    setLoadingData(true);
 
     Promise.all([
       api.listClaims(policyId ? Number(policyId) : undefined),
@@ -106,109 +90,130 @@ function ClaimsContent() {
   return (
     <>
       <Nav />
-      <main style={{ padding: "1.5rem", fontFamily: "system-ui, sans-serif", maxWidth: 900, margin: "0 auto" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h1>My Claims</h1>
-          <button
+      <main className="mx-auto max-w-4xl p-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">My Claims</h1>
+          <Button
             onClick={() => setShowForm(!showForm)}
-            style={{
-              padding: "0.5rem 1rem", backgroundColor: "#0275d8",
-              color: "#fff", border: "none", borderRadius: 4, cursor: "pointer",
-            }}
+            variant={showForm ? "outline" : "default"}
           >
             {showForm ? "Cancel" : "Submit Claim"}
-          </button>
+          </Button>
         </div>
 
-        {error && <p style={{ color: "red" }}>{error}</p>}
+        {error && (
+          <Alert variant="destructive" className="mt-4">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
         {showForm && (
-          <form onSubmit={handleSubmit} style={{
-            border: "1px solid #ddd", borderRadius: 4, padding: "1rem", marginBottom: "1rem",
-          }}>
-            <h3>Submit a New Claim</h3>
-            <div style={{ marginBottom: "0.75rem" }}>
-              <label style={{ display: "block", marginBottom: "0.25rem", fontWeight: "bold" }}>Policy</label>
-              <select
-                value={formPolicyId}
-                onChange={(e) => setFormPolicyId(e.target.value)}
-                required
-                style={{ width: "100%", padding: "0.5rem" }}
-              >
-                <option value="">Select a policy...</option>
-                {policies.filter((p) => ["ACTIVE", "CANCELLED", "EXPIRED"].includes(p.status)).map((p) => (
-                  <option key={p.id} value={p.id}>{p.policy_number} ({p.status})</option>
-                ))}
-              </select>
-            </div>
-            <div style={{ marginBottom: "0.75rem" }}>
-              <label style={{ display: "block", marginBottom: "0.25rem", fontWeight: "bold" }}>Date of Loss</label>
-              <input
-                type="date"
-                value={dateOfLoss}
-                onChange={(e) => setDateOfLoss(e.target.value)}
-                required
-                style={{ width: "100%", padding: "0.5rem" }}
-              />
-            </div>
-            <div style={{ marginBottom: "0.75rem" }}>
-              <label style={{ display: "block", marginBottom: "0.25rem", fontWeight: "bold" }}>Description</label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                required
-                rows={3}
-                style={{ width: "100%", padding: "0.5rem" }}
-              />
-            </div>
-            <div style={{ marginBottom: "0.75rem" }}>
-              <label style={{ display: "block", marginBottom: "0.25rem", fontWeight: "bold" }}>Estimated Amount ($)</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                value={estimatedAmount}
-                onChange={(e) => setEstimatedAmount(e.target.value)}
-                placeholder="Optional"
-                style={{ width: "100%", padding: "0.5rem" }}
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={submitting}
-              style={{
-                padding: "0.5rem 1rem", backgroundColor: "#5cb85c",
-                color: "#fff", border: "none", borderRadius: 4, cursor: "pointer",
-              }}
-            >
-              {submitting ? "Submitting..." : "Submit Claim"}
-            </button>
-          </form>
+          <Card className="mt-4 mb-4">
+            <CardHeader>
+              <CardTitle>Submit a New Claim</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="policy">Policy</Label>
+                  <select
+                    id="policy"
+                    value={formPolicyId}
+                    onChange={(e) => setFormPolicyId(e.target.value)}
+                    required
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  >
+                    <option value="">Select a policy...</option>
+                    {policies.filter((p) => ["ACTIVE", "CANCELLED", "EXPIRED"].includes(p.status)).map((p) => (
+                      <option key={p.id} value={p.id}>{p.policy_number} ({p.status})</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="dateOfLoss">Date of Loss</Label>
+                  <Input
+                    id="dateOfLoss"
+                    type="date"
+                    value={dateOfLoss}
+                    onChange={(e) => setDateOfLoss(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea
+                    id="description"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    required
+                    rows={3}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="estimatedAmount">Estimated Amount ($)</Label>
+                  <Input
+                    id="estimatedAmount"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={estimatedAmount}
+                    onChange={(e) => setEstimatedAmount(e.target.value)}
+                    placeholder="Optional"
+                  />
+                </div>
+                <Button type="submit" disabled={submitting}>
+                  {submitting ? "Submitting..." : "Submit Claim"}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
         )}
 
-        {loadingData && <p>Loading...</p>}
-        {!loadingData && claims.length === 0 && !showForm && (
-          <p style={{ color: "#666", textAlign: "center", padding: "2rem" }}>No claims found.</p>
-        )}
-
-        {claims.map((c) => (
-          <div key={c.id} style={{
-            border: "1px solid #ddd", borderRadius: 4, padding: "1rem", marginBottom: "0.75rem",
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h3 style={{ margin: 0 }}>{c.claim_number}</h3>
-              {statusBadge(c.status)}
-            </div>
-            <div style={{ marginTop: "0.5rem", fontSize: "0.9rem", color: "#555" }}>
-              <div>Date of Loss: {c.date_of_loss}</div>
-              <div>Description: {c.description}</div>
-              {c.estimated_amount_cents && (
-                <div>Estimated Amount: {formatCents(c.estimated_amount_cents)}</div>
-              )}
-              <div>Reported: {new Date(c.reported_at).toLocaleDateString()}</div>
-            </div>
+        {loadingData && (
+          <div className="mt-4 space-y-3">
+            {[1, 2].map((i) => (
+              <Card key={i}>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <Skeleton className="h-6 w-32" />
+                    <Skeleton className="h-6 w-20" />
+                  </div>
+                  <div className="mt-2 space-y-2">
+                    <Skeleton className="h-4 w-48" />
+                    <Skeleton className="h-4 w-64" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
-        ))}
+        )}
+        {!loadingData && claims.length === 0 && !showForm && (
+          <div className="py-8 text-center text-muted-foreground">
+            <p>No claims found.</p>
+            <p className="mt-1 text-sm">Submit a claim using the button above.</p>
+          </div>
+        )}
+
+        <div className="mt-4 space-y-3">
+          {claims.map((c) => (
+            <Card key={c.id}>
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">{c.claim_number}</h3>
+                  <StatusBadge status={c.status} />
+                </div>
+                <div className="mt-2 space-y-1 text-sm text-muted-foreground">
+                  <div>Date of Loss: {c.date_of_loss}</div>
+                  <div>Description: {c.description}</div>
+                  {c.estimated_amount_cents && (
+                    <div>Estimated Amount: {formatCents(c.estimated_amount_cents)}</div>
+                  )}
+                  <div>Reported: {new Date(c.reported_at).toLocaleDateString()}</div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </main>
     </>
   );
