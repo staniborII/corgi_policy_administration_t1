@@ -235,6 +235,34 @@ Format:
 - **Alternatives considered:** Regenerate and overwrite (violates reproducibility), version-based (over-engineered for V1).
 - **Impact / follow-up:** If a correction is needed, generate a new statement for a different period.
 
+## 2026-09-09 00:00 - M7: Reconciliation run non-atomic outer to persist FAILED runs
+- **Decision:** `run_reconciliation()` is NOT decorated with `@transaction.atomic`. The ReconciliationRun is created outside any transaction, reconciliation logic runs inside an inner `transaction.atomic()` block, and failure handling saves the FAILED status outside the rolled-back atomic block.
+- **Reason:** If the entire function is atomic, a provider outage exception rolls back both the break records AND the FAILED-status save, leaving no trace of the failed run. The run record must persist for audit even when reconciliation fails.
+- **Assumption / evidence:** Test `test_provider_outage_leaves_consistent_state` confirms FAILED run persists with error summary. Inner atomic ensures no partial breaks on failure.
+- **Alternatives considered:** Savepoint with partial rollback (more complex), post-exception re-save outside transaction (fragile).
+- **Impact / follow-up:** Staff can see failed runs in the UI and investigate provider issues.
+
+## 2026-09-09 00:00 - M7: MCP server safety — write tool creates approval only
+- **Decision:** The MCP `create_action_request` tool creates an Approval record in PENDING status with reason tagged `[MCP Agent]`. It never auto-approves, never mutates the ledger, and cannot bypass maker-checker.
+- **Reason:** PRD rule: "Agent writes enter human approval" and "Maker cannot approve own action." The MCP surface must be safe by construction.
+- **Assumption / evidence:** Tests verify: agent-created approvals are PENDING, `[MCP Agent]` tag in reason, no ledger mutation tools exposed, requesting user cannot approve own request.
+- **Alternatives considered:** Allow agent to auto-approve small amounts (violates maker-checker invariant), expose ledger reads only (too restrictive for useful agent workflows).
+- **Impact / follow-up:** All agent actions go through the normal staff approval queue.
+
+## 2026-09-09 00:00 - M7: Stripe-side idempotency keys on outbound API calls
+- **Decision:** Added `idempotency_key` parameter to `create_checkout_session()` and `create_stripe_refund()` outbound calls. Keys are passed via metadata and (for refunds) as Stripe's native idempotency_key parameter.
+- **Reason:** Stripe's server-side idempotency ensures that network retries or duplicate calls from our side don't create duplicate charges or refunds.
+- **Assumption / evidence:** Stripe caches the response for idempotency keys within 24 hours. This complements our webhook idempotency (inbound) with call-site idempotency (outbound).
+- **Alternatives considered:** Rely only on webhook idempotency (doesn't prevent duplicate Stripe-side objects), generate keys at the Stripe client library level (less control over key semantics).
+- **Impact / follow-up:** Cancellation refunds use `cancel-refund-{policy_id}` ensuring one refund per policy cancellation.
+
+## 2026-09-09 00:00 - M7: SIMULATED records skipped in provider comparison
+- **Decision:** Reconciliation skips records with SIMULATED-prefixed Stripe IDs when comparing against provider truth.
+- **Reason:** SIMULATED records were never sent to Stripe, so they cannot appear in provider API responses. Comparing them would create false MISSING_IN_PROVIDER breaks.
+- **Assumption / evidence:** All SIMULATED records are generated locally when `STRIPE_SECRET_KEY` is not set. In SIMULATED mode, `_get_provider_payments()` returns local records as provider truth, ensuring clean runs.
+- **Alternatives considered:** Include SIMULATED in comparison (would require mock provider to return matching records), separate reconciliation mode for SIMULATED (over-engineering).
+- **Impact / follow-up:** Live-fire with real Stripe will compare real PI IDs against real provider records.
+
 ## 2026-09-08 18:00 - Milestone reorder: infra and containerization moved to end
 - **Decision:** Moved Django containerization from milestone 2 to milestone 8, and AWS infrastructure from milestone 3 to milestone 9. All feature milestones (2-7) are built and tested locally first.
 - **Reason:** Build all domain features locally before dealing with deployment complexity. Faster iteration during the core build.

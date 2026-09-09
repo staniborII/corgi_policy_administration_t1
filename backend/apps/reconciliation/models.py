@@ -23,14 +23,30 @@ class ReconciliationBreak(models.Model):
         MISSING_IN_PROVIDER = "MISSING_IN_PROVIDER"
         AMOUNT_MISMATCH = "AMOUNT_MISMATCH"
         STATUS_MISMATCH = "STATUS_MISMATCH"
+        DUPLICATE_MATCH = "DUPLICATE_MATCH"
+        STALE_UNRESOLVED = "STALE_UNRESOLVED"
+
+    class Status(models.TextChoices):
+        OPEN = "OPEN"
+        ACKNOWLEDGED = "ACKNOWLEDGED"
+        RESOLVED = "RESOLVED"
 
     run = models.ForeignKey(ReconciliationRun, on_delete=models.PROTECT, related_name="breaks")
     break_type = models.CharField(max_length=30, choices=BreakType.choices)
     description = models.TextField()
+    source = models.CharField(max_length=30, default="STRIPE")
+    external_reference = models.CharField(max_length=255, blank=True)
+    local_reference = models.CharField(max_length=255, blank=True)
     expected_amount_cents = models.IntegerField(null=True, blank=True)
     actual_amount_cents = models.IntegerField(null=True, blank=True)
-    reference_id = models.CharField(max_length=255, blank=True)
+    first_seen_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.OPEN)
     resolved = models.BooleanField(default=False)
+    resolution_notes = models.TextField(blank=True)
+    resolved_by = models.ForeignKey(
+        "accounts.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="resolved_breaks"
+    )
+    resolved_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

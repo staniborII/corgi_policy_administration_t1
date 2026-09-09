@@ -38,6 +38,8 @@ backend/
 │   │   └── test_endorsement_flow.py # Pro-rata, approval, correction, as-of, PDF, API
 │   ├── claims/tests/
 │   │   └── test_claims_flow.py    # Claim intake, reserves, payments, maker-checker, payout
+│   ├── reconciliation/tests/
+│   │   └── test_reconciliation.py  # Reconciliation runs, breaks, resolution, MCP safety
 │   └── policies/tests/
 │       ├── test_policy_issuance.py # Issuance, approved broker guard, charges, API
 │       ├── test_policy_term.py     # Calendar anniversary logic
@@ -58,8 +60,9 @@ backend/
 | Endorsements | 35 | Pro-rata math (half-year, full-year, one-day, zero-day, negative, leap-year), creation (below/above threshold, address correction, draft-policy guard, out-of-term guard), customer approval, apply (balanced ledger, policy premium update, commission posting, tax/fee rates), correction (reversal creates new entry, original untouched, reversal entry posted, different pro-rata), leap-year 366-day term, as-of reconstruction (before/after/between endorsements), PDF generation (declarations, endorsement schedule, with as-of), API (create, list, approve, correct, as-of, PDFs, access control) |
 | Claims | 22 | Claim submission (active policy, outside-coverage rejection, pre-cancellation validity), reserves (initial sets status, adjustments append not mutate, incurred = paid + reserve, journal entries, negative adjustment, no double initial), payments (over limit rejected, small auto-approved, large needs approval), maker-checker (self-approval blocked, second staff approves), payout flow (execute sets pending, settled creates ledger entries, duplicate settled idempotent, returned compensating entries), payout destination (unverified blocks, no destination blocks, SIMULATED label, failed verification blocks) |
 | Cancellation & Refunds | 19 | Pro-rata (mid-term unearned, refundable tax on unearned, commission clawback match, last-day zero refund, before-effective error), leap year (366-day term), cancel flow (creates pending refund, records event, non-active raises, open claim survives), refund ledger (posts on success, balanced entry, clawback posted, idempotent, posts once), broker statement (ties to ledger, with clawback, rerun identical, data contains details) |
+| Reconciliation & MCP | 10 | Clean run (no breaks), missing in provider, missing in ledger, amount mismatch, duplicate webhook harmless, out-of-order webhook tolerated, provider outage (FAILED run), break resolution, MCP agent cannot approve own action, MCP tools no ledger mutation |
 
-**Total: 178 tests**
+**Total: 188 tests**
 
 ## Frontend
 

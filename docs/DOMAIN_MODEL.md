@@ -26,6 +26,8 @@ erDiagram
     JournalEntry ||--o| JournalEntry : "reversal_of"
 
     ReconciliationRun ||--o{ ReconciliationBreak : "breaks"
+    Approval }|--|| User : "requested_by"
+    Approval }o--o| User : "decided_by"
 ```
 
 ## Core Entities
@@ -114,6 +116,24 @@ Bank account verification for claim payouts.
 - `provider`: "SIMULATED" in v1, adapter for future Plaid replacement
 - `provider_reference`: SIM-BANK-xxx reference
 - Payout blocked unless verification_status = VERIFIED
+
+### ReconciliationRun
+Represents a single reconciliation comparison between local records and provider truth.
+- `run_date`: Date of reconciliation
+- `status`: RUNNING → COMPLETED | FAILED
+- `summary`: JSON with break count and error info
+
+### ReconciliationBreak
+A discrepancy detected between local and provider records.
+- `break_type`: MISSING_IN_LEDGER | MISSING_IN_PROVIDER | AMOUNT_MISMATCH | STATUS_MISMATCH | DUPLICATE_MATCH | STALE_UNRESOLVED
+- `status`: OPEN → ACKNOWLEDGED → RESOLVED
+- `source`: Provider source (e.g., "STRIPE")
+- `external_reference`: Provider-side identifier (e.g., pi_xxx)
+- `local_reference`: Local record ID
+- `expected_amount_cents` / `actual_amount_cents`: Amounts for mismatch comparison
+- `first_seen_at`: When the break was first detected
+- `resolution_notes`: Staff notes on resolution
+- `resolved_by`: Staff user who resolved the break
 
 ### LedgerAccount / JournalEntry / JournalLine
 Double-entry append-only ledger. See [MONEY_FLOWS.md](MONEY_FLOWS.md).

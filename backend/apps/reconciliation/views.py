@@ -4,9 +4,15 @@ from rest_framework.views import APIView
 
 from apps.accounts.permissions import IsStaffUser
 from apps.brokers.models import Broker
-from apps.reconciliation.models import BrokerStatement
-from apps.reconciliation.serializers import BrokerStatementSerializer, GenerateStatementSerializer
-from apps.reconciliation.services import generate_broker_statement
+from apps.reconciliation.models import BrokerStatement, ReconciliationBreak, ReconciliationRun
+from apps.reconciliation.serializers import (
+    BrokerStatementSerializer,
+    GenerateStatementSerializer,
+    ReconciliationBreakSerializer,
+    ReconciliationRunSerializer,
+    ResolveBreakSerializer,
+)
+from apps.reconciliation.services import generate_broker_statement, resolve_break, run_reconciliation
 
 
 class BrokerStatementListView(APIView):
@@ -47,3 +53,60 @@ class BrokerStatementDetailView(APIView):
             return Response({"detail": "Statement not found."}, status=status.HTTP_404_NOT_FOUND)
 
         return Response(BrokerStatementSerializer(statement).data)
+
+
+class ReconciliationRunListView(APIView):
+    permission_classes = [IsStaffUser]
+
+    def get(self, request):
+        qs = ReconciliationRun.objects.order_by("-started_at")[:50]
+        return Response(ReconciliationRunSerializer(qs, many=True).data)
+
+    def post(self, request):
+        recon_run = run_reconciliation()
+        return Response(ReconciliationRunSerializer(recon_run).data, status=status.HTTP_201_CREATED)
+
+
+class ReconciliationRunDetailView(APIView):
+    permission_classes = [IsStaffUser]
+
+    def get(self, request, pk):
+        try:
+            recon_run = ReconciliationRun.objects.get(pk=pk)
+        except ReconciliationRun.DoesNotExist:
+            return Response({"detail": "Run not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        run_data = ReconciliationRunSerializer(recon_run).data
+        breaks = ReconciliationBreak.objects.filter(run=recon_run).order_by("-created_at")
+        run_data["breaks"] = ReconciliationBreakSerializer(breaks, many=True).data
+        return Response(run_data)
+
+
+class ReconciliationBreakListView(APIView):
+    permission_classes = [IsStaffUser]
+
+    def get(self, request):
+        qs = ReconciliationBreak.objects.select_related("run").order_by("-created_at")
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+        return Response(ReconciliationBreakSerializer(qs[:100], many=True).data)
+
+
+class ResolveBreakView(APIView):
+    permission_classes = [IsStaffUser]
+
+    def post(self, request, pk):
+        serializer = ResolveBreakSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            brk = resolve_break(
+                break_id=pk,
+                resolved_by=request.user,
+                notes=serializer.validated_data.get("notes", ""),
+            )
+        except ReconciliationBreak.DoesNotExist:
+            return Response({"detail": "Break not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response(ReconciliationBreakSerializer(brk).data)

@@ -6,7 +6,16 @@ from apps.reconciliation.models import BrokerStatement, ReconciliationBreak, Rec
 class BreakInline(admin.TabularInline):
     model = ReconciliationBreak
     extra = 0
-    readonly_fields = ("break_type", "description", "expected_amount_cents", "actual_amount_cents", "reference_id")
+    readonly_fields = (
+        "break_type",
+        "description",
+        "source",
+        "external_reference",
+        "local_reference",
+        "expected_amount_cents",
+        "actual_amount_cents",
+        "status",
+    )
 
     def has_add_permission(self, request, obj=None):
         return False
@@ -26,10 +35,19 @@ class ReconciliationRunAdmin(admin.ModelAdmin):
 
 @admin.register(ReconciliationBreak)
 class ReconciliationBreakAdmin(admin.ModelAdmin):
-    list_display = ("id", "run", "break_type", "expected_amount_cents", "actual_amount_cents", "resolved")
-    list_filter = ("break_type", "resolved")
-    search_fields = ("reference_id", "description")
-    readonly_fields = ("created_at",)
+    list_display = (
+        "id",
+        "run",
+        "break_type",
+        "source",
+        "expected_amount_cents",
+        "actual_amount_cents",
+        "status",
+        "resolved",
+    )
+    list_filter = ("break_type", "status", "resolved")
+    search_fields = ("external_reference", "local_reference", "description")
+    readonly_fields = ("created_at", "first_seen_at")
 
 
 @admin.register(BrokerStatement)

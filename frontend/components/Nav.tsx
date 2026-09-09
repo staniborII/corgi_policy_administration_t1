@@ -31,6 +31,7 @@ export default function Nav() {
           <Link href="/staff/claims">Claims</Link>
           <Link href="/staff/payments">Payments</Link>
           <Link href="/staff/statements">Statements</Link>
+          <Link href="/staff/reconciliation">Reconciliation</Link>
         </>
       )}
       {user.role === "CUSTOMER" && (

@@ -28,7 +28,9 @@ def create_checkout_session(*, amount_cents, currency="usd", metadata=None, succ
 
     stripe.api_key = secret_key
 
-    session = stripe.checkout.Session.create(
+    idempotency_key = (metadata or {}).get("idempotency_key")
+
+    create_kwargs = dict(
         mode="payment",
         payment_method_types=["card"],
         line_items=[
@@ -46,6 +48,11 @@ def create_checkout_session(*, amount_cents, currency="usd", metadata=None, succ
         metadata=metadata or {},
         success_url=success_url,
         cancel_url=cancel_url,
+    )
+
+    session = stripe.checkout.Session.create(
+        **create_kwargs,
+        **({"idempotency_key": idempotency_key} if idempotency_key else {}),
     )
 
     return {
@@ -75,10 +82,13 @@ def create_stripe_refund(*, payment_intent_id, amount_cents, metadata=None):
 
     stripe.api_key = secret_key
 
+    idempotency_key = (metadata or {}).get("idempotency_key")
+
     refund = stripe.Refund.create(
         payment_intent=payment_intent_id,
         amount=amount_cents,
         metadata=metadata or {},
+        **({"idempotency_key": idempotency_key} if idempotency_key else {}),
     )
 
     return {"refund_id": refund.id, "simulated": False}

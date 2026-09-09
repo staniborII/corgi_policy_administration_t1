@@ -252,6 +252,39 @@ export interface BrokerStatementRecord {
   generated_at: string;
 }
 
+export interface ReconciliationRunRecord {
+  id: number;
+  run_date: string;
+  status: string;
+  started_at: string;
+  completed_at: string | null;
+  summary: Record<string, unknown>;
+  breaks_count: number;
+}
+
+export interface ReconciliationBreakRecord {
+  id: number;
+  run: number;
+  break_type: string;
+  description: string;
+  source: string;
+  external_reference: string;
+  local_reference: string;
+  expected_amount_cents: number | null;
+  actual_amount_cents: number | null;
+  first_seen_at: string | null;
+  status: string;
+  resolved: boolean;
+  resolution_notes: string;
+  resolved_at: string | null;
+  age_seconds: number | null;
+  created_at: string;
+}
+
+export interface ReconciliationRunDetail extends ReconciliationRunRecord {
+  breaks: ReconciliationBreakRecord[];
+}
+
 export const api = {
   login: (username: string, password: string) =>
     request<{ token: string; user: User }>("/api/auth/login/", {
@@ -442,4 +475,23 @@ export const api = {
 
   getBrokerStatement: (id: number) =>
     request<BrokerStatementRecord>(`/api/reconciliation/broker-statements/${id}/`),
+
+  // Reconciliation
+  listReconciliationRuns: () =>
+    request<ReconciliationRunRecord[]>("/api/reconciliation/runs/"),
+
+  triggerReconciliation: () =>
+    request<ReconciliationRunRecord>("/api/reconciliation/runs/", { method: "POST" }),
+
+  getReconciliationRun: (id: number) =>
+    request<ReconciliationRunDetail>(`/api/reconciliation/runs/${id}/`),
+
+  listReconciliationBreaks: (statusFilter?: string) =>
+    request<ReconciliationBreakRecord[]>(`/api/reconciliation/breaks/${statusFilter ? `?status=${statusFilter}` : ""}`),
+
+  resolveBreak: (breakId: number, notes?: string) =>
+    request<ReconciliationBreakRecord>(`/api/reconciliation/breaks/${breakId}/resolve/`, {
+      method: "POST",
+      body: JSON.stringify({ notes: notes || "" }),
+    }),
 };

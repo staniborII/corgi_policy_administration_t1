@@ -224,7 +224,11 @@ def cancel_policy(*, policy_id, cancelled_by, cancellation_date=None):
         result = create_stripe_refund(
             payment_intent_id=payment.stripe_payment_intent_id,
             amount_cents=total_refund,
-            metadata={"policy_id": str(policy.id), "policy_number": policy.policy_number},
+            metadata={
+                "policy_id": str(policy.id),
+                "policy_number": policy.policy_number,
+                "idempotency_key": f"cancel-refund-{policy.id}",
+            },
         )
 
         refund = Refund.objects.create(

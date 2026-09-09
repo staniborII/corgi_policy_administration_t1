@@ -81,6 +81,7 @@ backend/
 │   ├── claims/       # Claim, ReserveEvent, ClaimPayment
 │   ├── approvals/    # Maker-checker approval workflow
 │   ├── reconciliation/ # ReconciliationRun, breaks, BrokerStatement
+│   ├── mcp/          # MCP server (FastMCP) — 3 read tools + 1 write tool
 │   ├── documents/    # Document metadata and generation
 │   └── integrations/ # WebhookEvent, provider adapters (Stripe, Persona)
 └── tests/            # Root-level smoke tests
@@ -161,6 +162,12 @@ GET  /api/reconciliation/broker-statements/       → list broker statements (?b
 POST /api/reconciliation/broker-statements/       → generate statement (Staff only)
 GET  /api/reconciliation/broker-statements/<id>/  → statement detail
 
+GET  /api/reconciliation/runs/            → list reconciliation runs
+POST /api/reconciliation/runs/            → trigger reconciliation run (Staff only)
+GET  /api/reconciliation/runs/<id>/       → run detail with breaks
+GET  /api/reconciliation/breaks/          → list breaks (?status=OPEN|ACKNOWLEDGED|RESOLVED)
+POST /api/reconciliation/breaks/<id>/resolve/ → resolve break (Staff only)
+
 POST /api/integrations/webhooks/persona/  → Persona webhook (AllowAny, signature-verified)
 POST /api/integrations/webhooks/stripe/   → Stripe webhook (AllowAny, signature-verified)
 ```
@@ -182,6 +189,7 @@ POST /api/integrations/webhooks/stripe/   → Stripe webhook (AllowAny, signatur
 | `/customer/policies/detail?id=X` | Customer | Policy detail, endorsement approval, as-of, PDFs |
 | `/customer/claims` | Customer | View own claims, submit new claim |
 | `/staff/statements` | Staff | Generate and view broker statements |
+| `/staff/reconciliation` | Staff | Run reconciliation, view breaks, resolve breaks |
 
 ## Key Design Decisions
 
@@ -211,3 +219,6 @@ POST /api/integrations/webhooks/stripe/   → Stripe webhook (AllowAny, signatur
 - **Refund ledger timing**: Ledger entries only posted after provider confirms refund (not at cancellation)
 - **Commission clawback**: Separate journal entry (DR 2200 / CR 4200) posted with refund confirmation
 - **Broker statements**: Monthly, reproducible (unique_together on broker/period), derives from Payment/Refund records
+- **Reconciliation**: Compares local Payment/Refund records against Stripe provider truth. Detects breaks (MISSING_IN_LEDGER, MISSING_IN_PROVIDER, AMOUNT_MISMATCH, STATUS_MISMATCH). Break lifecycle: OPEN → ACKNOWLEDGED → RESOLVED
+- **MCP server**: FastMCP-based with 3 read tools (policy, claim, breaks) + 1 write tool (create_action_request → approval queue). Agent writes cannot bypass maker-checker or mutate the ledger
+- **Stripe idempotency keys**: Outbound API calls include idempotency_key in metadata for Stripe-side deduplication

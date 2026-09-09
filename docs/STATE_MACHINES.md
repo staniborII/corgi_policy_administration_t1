@@ -118,6 +118,29 @@ stateDiagram-v2
 
 Payment uses Stripe Checkout Sessions (redirect flow). The PENDING state represents a Checkout Session that the customer has been redirected to. Success is confirmed via the `checkout.session.completed` webhook, which triggers ledger posting and policy activation.
 
+## Reconciliation Break Status
+
+```mermaid
+stateDiagram-v2
+    [*] --> OPEN : break detected by reconciliation run
+    OPEN --> ACKNOWLEDGED : staff acknowledges
+    OPEN --> RESOLVED : staff resolves with notes
+    ACKNOWLEDGED --> RESOLVED : staff resolves with notes
+```
+
+Breaks are created during reconciliation runs when discrepancies are found. They remain OPEN until a staff member investigates and resolves them.
+
+## Reconciliation Run Status
+
+```mermaid
+stateDiagram-v2
+    [*] --> RUNNING : reconciliation triggered
+    RUNNING --> COMPLETED : all comparisons done
+    RUNNING --> FAILED : provider error or internal failure
+```
+
+A FAILED run persists in the database with error details in the summary. No partial breaks are saved (inner atomic block rolls back).
+
 ### Payment + Policy Interaction
 
 ```mermaid

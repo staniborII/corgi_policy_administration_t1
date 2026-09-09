@@ -220,6 +220,81 @@ sequenceDiagram
 - Duplicate RETURNED event on an already-RETURNED payment is a no-op
 - Ledger entries use idempotency keys: `payout-settled-{reference}`, `payout-returned-{reference}`
 
+## Stripe Idempotency Keys (Outbound)
+
+Outbound Stripe API calls include idempotency keys to prevent duplicate charges or refunds:
+
+| API Call | Idempotency Key |
+|----------|----------------|
+| `create_checkout_session` | `metadata.idempotency_key` (passed to Stripe session metadata) |
+| `create_stripe_refund` | `cancel-refund-{policy_id}` (via metadata + Stripe idempotency_key param) |
+
+Stripe returns the same response for duplicate requests with the same idempotency key within 24 hours.
+
+## Reconciliation Service
+
+### Purpose
+
+Compares local Payment/Refund records against provider truth (Stripe API or SIMULATED local records). Detects discrepancies and creates break records for staff investigation.
+
+### Flow
+
+```mermaid
+sequenceDiagram
+    participant Staff
+    participant API
+    participant Service
+    participant Stripe
+
+    Staff->>API: POST /reconciliation/runs/
+    API->>Service: run_reconciliation()
+    Service->>Stripe: PaymentIntent.list() / Refund.list()
+    Stripe-->>Service: provider records
+    Service->>Service: compare local vs provider
+    Service->>Service: create breaks for discrepancies
+    Service-->>API: ReconciliationRun (COMPLETED/FAILED)
+    API-->>Staff: run detail with breaks
+```
+
+### Break Types
+
+| Type | Meaning |
+|------|---------|
+| MISSING_IN_LEDGER | Provider has a record we don't |
+| MISSING_IN_PROVIDER | We have a record the provider doesn't |
+| AMOUNT_MISMATCH | Amounts differ between local and provider |
+| STATUS_MISMATCH | Status differs between local and provider |
+| DUPLICATE_MATCH | Potential duplicate record detected |
+| STALE_UNRESOLVED | Break has been open longer than threshold |
+
+### SIMULATED Mode
+
+When `STRIPE_SECRET_KEY` is not configured, the reconciliation service uses local records as "provider truth." SIMULATED-prefixed records are skipped for provider comparison since they were never sent to the real provider.
+
+## MCP Server
+
+### Purpose
+
+Provides an MCP (Model Context Protocol) interface for AI agent interaction with the policy administration system. Implemented with FastMCP.
+
+### Tools
+
+| Tool | Type | Purpose |
+|------|------|---------|
+| `read_policy` | Read | Policy details, events, endorsements |
+| `read_claim` | Read | Claim details, reserves, payments, financials |
+| `read_reconciliation_breaks` | Read | Break listing with status filtering |
+| `create_action_request` | Write | Creates approval request (enters human queue) |
+
+### Safety Invariants
+
+- Agent-created requests enter PENDING status (never auto-approved)
+- Reason tagged with `[MCP Agent]` for audit trail
+- No tool exposes ledger mutation
+- Maker-checker enforced — requesting user cannot approve their own request
+- Valid action types: CLAIM_PAYMENT, REFUND, PAYOUT
+- Valid target types: claim_payment, refund
+
 ## Webhook Event Model
 
 All provider webhooks are logged in the `WebhookEvent` model:
