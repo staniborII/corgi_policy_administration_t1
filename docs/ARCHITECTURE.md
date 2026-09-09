@@ -152,6 +152,15 @@ GET  /api/claims/<id>/payout-destination/        → payout destination details 
 POST /api/claims/<id>/payout-destination/        → set payout destination (Staff only)
 POST /api/claims/<id>/payout-destination/verify/ → simulate bank verification (Staff only)
 
+POST /api/policies/<id>/cancel/           → cancel policy (Staff only)
+
+GET  /api/payments/policy/<id>/refunds/   → list refunds for policy
+POST /api/payments/refunds/<id>/simulate/ → simulate refund success (dev mode only)
+
+GET  /api/reconciliation/broker-statements/       → list broker statements (?broker_id=)
+POST /api/reconciliation/broker-statements/       → generate statement (Staff only)
+GET  /api/reconciliation/broker-statements/<id>/  → statement detail
+
 POST /api/integrations/webhooks/persona/  → Persona webhook (AllowAny, signature-verified)
 POST /api/integrations/webhooks/stripe/   → Stripe webhook (AllowAny, signature-verified)
 ```
@@ -172,6 +181,7 @@ POST /api/integrations/webhooks/stripe/   → Stripe webhook (AllowAny, signatur
 | `/staff/claims/detail?id=X` | Staff | Claim detail, reserves, payments, payout destination, maker-checker |
 | `/customer/policies/detail?id=X` | Customer | Policy detail, endorsement approval, as-of, PDFs |
 | `/customer/claims` | Customer | View own claims, submit new claim |
+| `/staff/statements` | Staff | Generate and view broker statements |
 
 ## Key Design Decisions
 
@@ -197,3 +207,7 @@ POST /api/integrations/webhooks/stripe/   → Stripe webhook (AllowAny, signatur
 - **Bank verification simulator**: SIMULATED provider behind adapter boundary, states PENDING → VERIFIED/FAILED
 - **Payout simulator**: SIMULATED payout with SIM-PAY- references, supports settled/returned/failed callbacks
 - **Policy coverage limit**: Per-occurrence limit checked before creating claim payments (default $1M)
+- **Pro-rata cancellation**: `unearned = prorate(premium, remaining_days, total_days)` with refundable taxes/fees
+- **Refund ledger timing**: Ledger entries only posted after provider confirms refund (not at cancellation)
+- **Commission clawback**: Separate journal entry (DR 2200 / CR 4200) posted with refund confirmation
+- **Broker statements**: Monthly, reproducible (unique_together on broker/period), derives from Payment/Refund records

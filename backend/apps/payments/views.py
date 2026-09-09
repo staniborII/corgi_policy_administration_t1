@@ -2,9 +2,14 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.payments.models import Payment
-from apps.payments.serializers import CreateCheckoutSerializer, PaymentSerializer
-from apps.payments.services import PaymentError, create_checkout_for_policy, simulate_payment_success
+from apps.payments.models import Payment, Refund
+from apps.payments.serializers import CreateCheckoutSerializer, PaymentSerializer, RefundSerializer
+from apps.payments.services import (
+    PaymentError,
+    create_checkout_for_policy,
+    simulate_payment_success,
+    simulate_refund_success,
+)
 from apps.policies.models import Policy
 
 
@@ -56,3 +61,33 @@ class SimulatePaymentView(APIView):
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response(PaymentSerializer(payment).data)
+
+
+class PolicyRefundsView(APIView):
+    """List refunds for a specific policy."""
+
+    def get(self, request, policy_id):
+        try:
+            policy = Policy.objects.get(id=policy_id)
+        except Policy.DoesNotExist:
+            return Response({"detail": "Policy not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if request.user.role == "CUSTOMER" and policy.customer_id != request.user.id:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        refunds = Refund.objects.filter(payment__policy=policy).order_by("-created_at")
+        return Response(RefundSerializer(refunds, many=True).data)
+
+
+class SimulateRefundView(APIView):
+    """Simulate a successful refund (only when Stripe is not configured)."""
+
+    def post(self, request, refund_id):
+        try:
+            refund = simulate_refund_success(refund_id=refund_id)
+        except Refund.DoesNotExist:
+            return Response({"detail": "Refund not found."}, status=status.HTTP_404_NOT_FOUND)
+        except PaymentError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(RefundSerializer(refund).data)

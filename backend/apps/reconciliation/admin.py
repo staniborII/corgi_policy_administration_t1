@@ -40,8 +40,11 @@ class BrokerStatementAdmin(admin.ModelAdmin):
         "period_end",
         "total_premium_cents",
         "total_commission_cents",
+        "total_clawback_cents",
+        "net_due_cents",
+        "is_closed",
         "generated_at",
     )
-    list_filter = ("broker",)
+    list_filter = ("broker", "is_closed")
     search_fields = ("broker__company_name",)
-    readonly_fields = ("generated_at",)
+    readonly_fields = ("generated_at", "statement_data")

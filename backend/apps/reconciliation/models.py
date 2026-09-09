@@ -43,7 +43,14 @@ class BrokerStatement(models.Model):
     period_end = models.DateField()
     total_premium_cents = models.PositiveIntegerField(default=0)
     total_commission_cents = models.PositiveIntegerField(default=0)
+    total_clawback_cents = models.IntegerField(default=0)
+    net_due_cents = models.IntegerField(default=0)
+    statement_data = models.JSONField(default=dict, blank=True)
+    is_closed = models.BooleanField(default=False)
     generated_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [("broker", "period_start", "period_end")]
 
     def __str__(self):
         return f"Statement for {self.broker} ({self.period_start} — {self.period_end})"

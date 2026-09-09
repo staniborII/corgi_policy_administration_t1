@@ -215,3 +215,72 @@ When an endorsement is corrected (e.g., wrong effective date):
 6. **New endorsement applied** with new journal entries and commission
 
 All original entries remain visible for audit. The correction is linked via `correction_of` foreign key.
+
+### Cancellation Refund (Pro-Rata)
+
+When a policy is cancelled, unearned premium + refundable taxes/fees are refunded.
+
+**Calculation:**
+```
+unearned_premium = prorate(premium, remaining_days, total_days)
+refundable_tax   = rate_amount(unearned_premium, tax_rate_bps)
+refundable_fees  = rate_amount(unearned_premium, fee_rate_bps)
+total_refund     = unearned_premium + refundable_tax + refundable_fees
+```
+
+**Ledger entries (posted only after Stripe confirms refund):**
+
+Refund entry (e.g., cancel at 6 months: $500 premium + $24.25 tax + $0.20 fee):
+| Line | Account | Debit | Credit |
+|------|---------|-------|--------|
+| 1 | 2000 Unearned Premium | 50,000 | |
+| 2 | 2100 State Premium Tax Payable | 2,425 | |
+| 3 | 2150 Stamping Fee Payable | 20 | |
+| 4 | 2400 Refund Payable | | 52,445 |
+
+Commission clawback (separate entry — 15% on unearned premium = $75):
+| Line | Account | Debit | Credit |
+|------|---------|-------|--------|
+| 1 | 2200 Broker Commission Payable | 7,500 | |
+| 2 | 4200 Commission Clawback | | 7,500 |
+
+```mermaid
+flowchart LR
+    A[Policy cancelled] --> B[PENDING Refund created]
+    B --> C[Stripe refund API called]
+    C --> D{Provider confirms?}
+    D -- Yes --> E[Post refund ledger entries]
+    D -- Yes --> F[Post commission clawback]
+    D -- No --> G[Mark refund FAILED]
+```
+
+### Cancellation + Refund Full Lifecycle
+
+```mermaid
+sequenceDiagram
+    participant Staff
+    participant Policy
+    participant Stripe
+    participant Ledger
+
+    Staff->>Policy: cancel_policy (compute pro-rata refund)
+    Policy->>Stripe: create_stripe_refund
+    Note over Policy: Refund PENDING (no ledger yet)
+    Note over Policy: Policy → CANCELLED
+
+    Stripe-->>Policy: charge.refunded webhook
+    Policy->>Ledger: handle_refund_success
+    Ledger-->>Ledger: DR 2000,2100,2150 / CR 2400 (refund)
+    Ledger-->>Ledger: DR 2200 / CR 4200 (clawback)
+    Note over Policy: Refund SUCCEEDED
+```
+
+### Broker Statement
+
+Monthly statements tie commission, clawback, and net due to the cent:
+
+```
+net_due = total_commission - total_clawback
+```
+
+Statement derives from succeeded Payments and Refunds within the period. Once generated, the statement is frozen (reproducible — same period always returns the same result).

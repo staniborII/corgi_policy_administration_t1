@@ -130,3 +130,125 @@ def issue_policy(*, customer, broker_id, effective_date, premium_amount_cents, c
     )
 
     return policy, charges
+
+
+def prorate_amount(annual_amount_cents: int, remaining_days: int, total_days: int) -> int:
+    if total_days <= 0:
+        return 0
+    result = Decimal(annual_amount_cents) * Decimal(remaining_days) / Decimal(total_days)
+    return int(result.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+def compute_cancellation_refund(*, policy, cancellation_date):
+    """
+    Calculate all refundable components for a pro-rata cancellation.
+    Returns a dict with unearned premium, refundable taxes/fees, commission clawback, and total.
+    """
+    total_days = (policy.expiration_date - policy.effective_date).days
+    remaining_days = (policy.expiration_date - cancellation_date).days
+
+    if remaining_days < 0:
+        remaining_days = 0
+    if remaining_days > total_days:
+        raise PolicyError("Cancellation date is before policy effective date")
+
+    unearned_premium = prorate_amount(policy.premium_amount_cents, remaining_days, total_days)
+
+    tax_rules = get_applicable_tax_rules(policy.coverage_territory, as_of=policy.effective_date)
+    fee_rules = get_applicable_fee_rules(policy.coverage_territory, as_of=policy.effective_date)
+
+    refundable_tax_details = []
+    total_refundable_tax = 0
+    for rule in tax_rules:
+        if rule.is_refundable:
+            amount = calculate_rate_amount(unearned_premium, rule.rate_bps)
+            total_refundable_tax += amount
+            refundable_tax_details.append(
+                {"rule_id": rule.id, "name": rule.name, "rate_bps": rule.rate_bps, "amount_cents": amount}
+            )
+
+    refundable_fee_details = []
+    total_refundable_fees = 0
+    for rule in fee_rules:
+        if rule.is_refundable:
+            amount = calculate_fee_amount(rule, unearned_premium)
+            total_refundable_fees += amount
+            refundable_fee_details.append({"rule_id": rule.id, "name": rule.name, "amount_cents": amount})
+
+    total_refund = unearned_premium + total_refundable_tax + total_refundable_fees
+
+    commission_clawback = calculate_rate_amount(unearned_premium, policy.broker.commission_rate_bps)
+
+    return {
+        "cancellation_date": str(cancellation_date),
+        "total_days": total_days,
+        "remaining_days": remaining_days,
+        "unearned_premium_cents": unearned_premium,
+        "refundable_tax_details": refundable_tax_details,
+        "total_refundable_tax_cents": total_refundable_tax,
+        "refundable_fee_details": refundable_fee_details,
+        "total_refundable_fees_cents": total_refundable_fees,
+        "total_refund_cents": total_refund,
+        "commission_clawback_cents": commission_clawback,
+    }
+
+
+@transaction.atomic
+def cancel_policy(*, policy_id, cancelled_by, cancellation_date=None):
+    """
+    Cancel an active policy with pro-rata refund.
+    Creates a Stripe refund (PENDING until provider confirms).
+    Ledger entries are NOT posted here — they wait for refund confirmation.
+    """
+    from apps.integrations.stripe.client import create_stripe_refund
+    from apps.payments.models import Payment, Refund
+
+    policy = Policy.objects.select_for_update().get(id=policy_id)
+
+    if policy.status != Policy.Status.ACTIVE:
+        raise PolicyError("Can only cancel an active policy")
+
+    if cancellation_date is None:
+        cancellation_date = date.today()
+
+    refund_data = compute_cancellation_refund(policy=policy, cancellation_date=cancellation_date)
+    total_refund = refund_data["total_refund_cents"]
+    now = timezone.now()
+
+    refund = None
+    if total_refund > 0:
+        payment = Payment.objects.filter(policy=policy, status=Payment.Status.SUCCEEDED).order_by("created_at").first()
+        if not payment:
+            raise PolicyError("No successful payment found to refund")
+
+        result = create_stripe_refund(
+            payment_intent_id=payment.stripe_payment_intent_id,
+            amount_cents=total_refund,
+            metadata={"policy_id": str(policy.id), "policy_number": policy.policy_number},
+        )
+
+        refund = Refund.objects.create(
+            payment=payment,
+            amount_cents=total_refund,
+            status=Refund.Status.PENDING,
+            stripe_refund_id=result["refund_id"],
+            reason=f"Pro-rata cancellation as of {cancellation_date}",
+            charges_snapshot=refund_data,
+            effective_at=now,
+        )
+
+    policy.status = Policy.Status.CANCELLED
+    policy.save(update_fields=["status", "updated_at"])
+
+    PolicyEvent.objects.create(
+        policy=policy,
+        event_type=PolicyEvent.EventType.CANCELLED,
+        effective_at=now,
+        created_by=cancelled_by,
+        data={
+            **refund_data,
+            "refund_id": refund.id if refund else None,
+        },
+    )
+
+    return {"policy": policy, "refund": refund, **refund_data}

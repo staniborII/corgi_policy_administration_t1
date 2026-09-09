@@ -32,7 +32,8 @@ backend/
 │   │   ├── test_posting.py        # Journal entry posting, balance, idempotency
 │   │   └── test_reversal.py       # Reversal, correction flow
 │   ├── payments/tests/
-│   │   └── test_payment_flow.py   # Checkout, success, failure, ledger, commission, webhook, API
+│   │   ├── test_payment_flow.py   # Checkout, success, failure, ledger, commission, webhook, API
+│   │   └── test_cancellation_flow.py # Pro-rata, refund, clawback, ledger, broker statement
 │   ├── endorsements/tests/
 │   │   └── test_endorsement_flow.py # Pro-rata, approval, correction, as-of, PDF, API
 │   ├── claims/tests/
@@ -56,8 +57,9 @@ backend/
 | Payments | 23 | Checkout creation (state transitions, payment record, events, active-policy guard), success (activation, balanced ledger, charge total, commission, events), idempotency (duplicate success posts ledger once), failure (no activation, no ledger), simulated mode, ledger balances, commission rounding, Stripe webhook API (signature rejection, invalid JSON, full flow, duplicate idempotency), payment API (create checkout, list, simulate, access control) |
 | Endorsements | 35 | Pro-rata math (half-year, full-year, one-day, zero-day, negative, leap-year), creation (below/above threshold, address correction, draft-policy guard, out-of-term guard), customer approval, apply (balanced ledger, policy premium update, commission posting, tax/fee rates), correction (reversal creates new entry, original untouched, reversal entry posted, different pro-rata), leap-year 366-day term, as-of reconstruction (before/after/between endorsements), PDF generation (declarations, endorsement schedule, with as-of), API (create, list, approve, correct, as-of, PDFs, access control) |
 | Claims | 22 | Claim submission (active policy, outside-coverage rejection, pre-cancellation validity), reserves (initial sets status, adjustments append not mutate, incurred = paid + reserve, journal entries, negative adjustment, no double initial), payments (over limit rejected, small auto-approved, large needs approval), maker-checker (self-approval blocked, second staff approves), payout flow (execute sets pending, settled creates ledger entries, duplicate settled idempotent, returned compensating entries), payout destination (unverified blocks, no destination blocks, SIMULATED label, failed verification blocks) |
+| Cancellation & Refunds | 19 | Pro-rata (mid-term unearned, refundable tax on unearned, commission clawback match, last-day zero refund, before-effective error), leap year (366-day term), cancel flow (creates pending refund, records event, non-active raises, open claim survives), refund ledger (posts on success, balanced entry, clawback posted, idempotent, posts once), broker statement (ties to ledger, with clawback, rerun identical, data contains details) |
 
-**Total: 159 tests**
+**Total: 178 tests**
 
 ## Frontend
 

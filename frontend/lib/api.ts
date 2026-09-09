@@ -214,6 +214,44 @@ export interface PayoutDestinationRecord {
   updated_at: string;
 }
 
+export interface RefundRecord {
+  id: number;
+  payment: number;
+  amount_cents: number;
+  status: string;
+  stripe_refund_id: string;
+  reason: string;
+  charges_snapshot: Record<string, unknown> | null;
+  effective_at: string;
+  recorded_at: string;
+  created_at: string;
+}
+
+export interface CancellationResult {
+  policy: Policy;
+  unearned_premium_cents: number;
+  total_refundable_tax_cents: number;
+  total_refundable_fees_cents: number;
+  total_refund_cents: number;
+  commission_clawback_cents: number;
+  refund?: RefundRecord;
+}
+
+export interface BrokerStatementRecord {
+  id: number;
+  broker: number;
+  broker_name: string;
+  period_start: string;
+  period_end: string;
+  total_premium_cents: number;
+  total_commission_cents: number;
+  total_clawback_cents: number;
+  net_due_cents: number;
+  statement_data: Record<string, unknown>;
+  is_closed: boolean;
+  generated_at: string;
+}
+
 export const api = {
   login: (username: string, password: string) =>
     request<{ token: string; user: User }>("/api/auth/login/", {
@@ -378,4 +416,30 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ outcome }),
     }),
+
+  // Cancellation & Refunds
+  cancelPolicy: (policyId: number, cancellationDate?: string) =>
+    request<CancellationResult>(`/api/policies/${policyId}/cancel/`, {
+      method: "POST",
+      body: JSON.stringify(cancellationDate ? { cancellation_date: cancellationDate } : {}),
+    }),
+
+  listPolicyRefunds: (policyId: number) =>
+    request<RefundRecord[]>(`/api/payments/policy/${policyId}/refunds/`),
+
+  simulateRefund: (refundId: number) =>
+    request<RefundRecord>(`/api/payments/refunds/${refundId}/simulate/`, { method: "POST" }),
+
+  // Broker Statements
+  listBrokerStatements: (brokerId?: number) =>
+    request<BrokerStatementRecord[]>(`/api/reconciliation/broker-statements/${brokerId ? `?broker_id=${brokerId}` : ""}`),
+
+  generateBrokerStatement: (data: { broker_id: number; period_start: string; period_end: string }) =>
+    request<BrokerStatementRecord>("/api/reconciliation/broker-statements/", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  getBrokerStatement: (id: number) =>
+    request<BrokerStatementRecord>(`/api/reconciliation/broker-statements/${id}/`),
 };

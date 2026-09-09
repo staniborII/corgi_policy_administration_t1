@@ -8,7 +8,7 @@ from django.utils import timezone
 from apps.integrations.stripe.client import create_checkout_session
 from apps.ledger.models import JournalLine
 from apps.ledger.services import post_journal_entry
-from apps.payments.models import Payment
+from apps.payments.models import Payment, Refund
 from apps.policies.models import Policy, PolicyEvent
 from apps.policies.services import calculate_rate_amount, compute_policy_charges
 
@@ -227,3 +227,109 @@ def simulate_payment_success(*, payment_id):
         payment_id=payment_id,
         stripe_payment_intent_id=f"SIMULATED-pi-{uuid.uuid4().hex[:12]}",
     )
+
+
+@transaction.atomic
+def handle_refund_success(*, refund_id):
+    """
+    Process a confirmed refund: post ledger entries for the premium refund,
+    tax/fee refunds, and commission clawback.
+    """
+    refund = Refund.objects.select_for_update().get(id=refund_id)
+
+    if refund.status == Refund.Status.SUCCEEDED:
+        logger.info("Refund %s already succeeded — idempotent skip", refund_id)
+        return refund
+
+    if refund.status != Refund.Status.PENDING:
+        raise PaymentError(f"Refund {refund_id} is not in PENDING state (status: {refund.status})")
+
+    refund.status = Refund.Status.SUCCEEDED
+    refund.save(update_fields=["status", "updated_at"])
+
+    charges = refund.charges_snapshot or {}
+    policy = refund.payment.policy
+    now = timezone.now()
+
+    unearned_premium = charges.get("unearned_premium_cents", 0)
+    total_refundable_tax = charges.get("total_refundable_tax_cents", 0)
+    total_refundable_fees = charges.get("total_refundable_fees_cents", 0)
+
+    journal_lines = []
+
+    if unearned_premium > 0:
+        journal_lines.append(
+            {"account_code": "2000", "amount_cents": unearned_premium, "entry_type": JournalLine.EntryType.DEBIT}
+        )
+
+    if total_refundable_tax > 0:
+        journal_lines.append(
+            {"account_code": "2100", "amount_cents": total_refundable_tax, "entry_type": JournalLine.EntryType.DEBIT}
+        )
+
+    if total_refundable_fees > 0:
+        journal_lines.append(
+            {"account_code": "2150", "amount_cents": total_refundable_fees, "entry_type": JournalLine.EntryType.DEBIT}
+        )
+
+    total_refund = unearned_premium + total_refundable_tax + total_refundable_fees
+    if total_refund > 0:
+        journal_lines.append(
+            {"account_code": "2400", "amount_cents": total_refund, "entry_type": JournalLine.EntryType.CREDIT}
+        )
+
+        post_journal_entry(
+            effective_at=now,
+            lines=journal_lines,
+            memo=f"Cancellation refund for {policy.policy_number}",
+            idempotency_key=f"cancellation-refund-{refund.id}",
+        )
+
+    commission_clawback = charges.get("commission_clawback_cents", 0)
+    if commission_clawback > 0:
+        post_journal_entry(
+            effective_at=now,
+            lines=[
+                {
+                    "account_code": "2200",
+                    "amount_cents": commission_clawback,
+                    "entry_type": JournalLine.EntryType.DEBIT,
+                },
+                {
+                    "account_code": "4200",
+                    "amount_cents": commission_clawback,
+                    "entry_type": JournalLine.EntryType.CREDIT,
+                },
+            ],
+            memo=f"Commission clawback for {policy.policy_number}",
+            idempotency_key=f"commission-clawback-{refund.id}",
+        )
+
+    return refund
+
+
+@transaction.atomic
+def handle_refund_failure(*, refund_id, reason=""):
+    """Mark a refund as failed."""
+    refund = Refund.objects.select_for_update().get(id=refund_id)
+
+    if refund.status in (Refund.Status.SUCCEEDED, Refund.Status.FAILED):
+        return refund
+
+    refund.status = Refund.Status.FAILED
+    refund.save(update_fields=["status", "updated_at"])
+    return refund
+
+
+@transaction.atomic
+def simulate_refund_success(*, refund_id):
+    """For SIMULATED mode only: directly complete a refund without Stripe."""
+    if settings.STRIPE_SECRET_KEY:
+        raise PaymentError("Cannot simulate refund when Stripe is configured")
+
+    refund = Refund.objects.get(id=refund_id)
+
+    if not refund.stripe_refund_id.startswith("SIMULATED"):
+        raise PaymentError("Cannot simulate a real Stripe refund")
+
+    return handle_refund_success(refund_id=refund_id)

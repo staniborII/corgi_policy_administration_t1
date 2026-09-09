@@ -6,10 +6,11 @@ from rest_framework.views import APIView
 
 from apps.accounts.models import User
 from apps.accounts.permissions import IsStaffUser
+from apps.payments.serializers import CancelPolicySerializer, RefundSerializer
 from apps.policies.models import FeeRule, Policy, TaxRule
 from apps.policies.selectors import get_policy_as_of
 from apps.policies.serializers import CreatePolicySerializer, PolicyDetailSerializer, PolicySerializer
-from apps.policies.services import PolicyError, issue_policy
+from apps.policies.services import PolicyError, cancel_policy, issue_policy
 
 
 class PolicyListView(APIView):
@@ -100,3 +101,35 @@ class PolicyAsOfView(APIView):
 
         snapshot = get_policy_as_of(pk, as_of=as_of)
         return Response(snapshot)
+
+
+class CancelPolicyView(APIView):
+    permission_classes = [IsStaffUser]
+
+    def post(self, request, pk):
+        serializer = CancelPolicySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            result = cancel_policy(
+                policy_id=pk,
+                cancelled_by=request.user,
+                cancellation_date=serializer.validated_data.get("cancellation_date"),
+            )
+        except Policy.DoesNotExist:
+            return Response({"detail": "Policy not found."}, status=status.HTTP_404_NOT_FOUND)
+        except PolicyError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        response_data = {
+            "policy": PolicySerializer(result["policy"]).data,
+            "unearned_premium_cents": result["unearned_premium_cents"],
+            "total_refundable_tax_cents": result["total_refundable_tax_cents"],
+            "total_refundable_fees_cents": result["total_refundable_fees_cents"],
+            "total_refund_cents": result["total_refund_cents"],
+            "commission_clawback_cents": result["commission_clawback_cents"],
+        }
+        if result["refund"]:
+            response_data["refund"] = RefundSerializer(result["refund"]).data
+
+        return Response(response_data)

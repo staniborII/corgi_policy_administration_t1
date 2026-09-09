@@ -36,6 +36,7 @@ class Refund(models.Model):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.REQUESTED)
     stripe_refund_id = models.CharField(max_length=255, blank=True)
     reason = models.TextField(blank=True)
+    charges_snapshot = models.JSONField(null=True, blank=True)
     effective_at = models.DateTimeField()
     recorded_at = models.DateTimeField(auto_now_add=True)
     created_at = models.DateTimeField(auto_now_add=True)

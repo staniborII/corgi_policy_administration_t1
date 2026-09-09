@@ -98,11 +98,14 @@ Bank verification is SIMULATED in v1, labelled with provider="SIMULATED" and SIM
 
 ```mermaid
 stateDiagram-v2
-    [*] --> REQUESTED
-    REQUESTED --> PENDING : refund initiated
-    PENDING --> SUCCEEDED : Stripe confirms
-    PENDING --> FAILED : Stripe fails
+    [*] --> PENDING : cancellation creates refund + Stripe API call
+    PENDING --> SUCCEEDED : charge.refunded webhook (handle_refund_success)
+    PENDING --> FAILED : Stripe failure (handle_refund_failure)
 ```
+
+Refund is created in PENDING state when a policy is cancelled. Ledger entries are only posted on transition to SUCCEEDED — the system does not create a ledger row before the provider confirms the refund.
+
+In SIMULATED mode (no Stripe key), the `/payments/refunds/<id>/simulate/` endpoint triggers handle_refund_success directly.
 
 ## Payment Status
 

@@ -8,6 +8,7 @@ import {
   type Policy,
   type EndorsementRecord,
   type AsOfSnapshot,
+  type RefundRecord,
   ApiError,
 } from "@/lib/api";
 import Nav from "@/components/Nav";
@@ -85,6 +86,12 @@ function StaffPolicyDetailContent() {
 
   const [actionLoading, setActionLoading] = useState<number | null>(null);
 
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelDate, setCancelDate] = useState("");
+  const [cancelResult, setCancelResult] = useState<Record<string, unknown> | null>(null);
+  const [refunds, setRefunds] = useState<RefundRecord[]>([]);
+  const [simulatingRefund, setSimulatingRefund] = useState(false);
+
   useEffect(() => {
     if (loading) return;
     if (!user || user.role !== "STAFF") {
@@ -102,12 +109,14 @@ function StaffPolicyDetailContent() {
     if (!policyId) return;
     setLoadingData(true);
     try {
-      const [p, e] = await Promise.all([
+      const [p, e, r] = await Promise.all([
         api.getPolicy(parseInt(policyId, 10)),
         api.listEndorsements(parseInt(policyId, 10)),
+        api.listPolicyRefunds(parseInt(policyId, 10)),
       ]);
       setPolicy(p);
       setEndorsements(e);
+      setRefunds(r);
     } catch {
       setError("Failed to load policy data.");
     } finally {
@@ -186,6 +195,35 @@ function StaffPolicyDetailContent() {
       setError("Failed to load as-of snapshot.");
     } finally {
       setLoadingAsOf(false);
+    }
+  }
+
+  async function handleCancel() {
+    if (!policyId) return;
+    if (!confirm("Are you sure you want to cancel this policy? A pro-rata refund will be created.")) return;
+    setCancelling(true);
+    setError("");
+    try {
+      const result = await api.cancelPolicy(parseInt(policyId, 10), cancelDate || undefined);
+      setCancelResult(result as unknown as Record<string, unknown>);
+      await loadData();
+    } catch (err) {
+      setError(err instanceof ApiError ? JSON.stringify(err.body) : "Failed to cancel policy.");
+    } finally {
+      setCancelling(false);
+    }
+  }
+
+  async function handleSimulateRefund(refundId: number) {
+    setSimulatingRefund(true);
+    setError("");
+    try {
+      await api.simulateRefund(refundId);
+      await loadData();
+    } catch (err) {
+      setError(err instanceof ApiError ? JSON.stringify(err.body) : "Failed to simulate refund.");
+    } finally {
+      setSimulatingRefund(false);
     }
   }
 
@@ -474,6 +512,87 @@ function StaffPolicyDetailContent() {
             </table>
           )}
         </div>
+
+        {/* Cancellation Section */}
+        {policy.status === "ACTIVE" && (
+          <div style={{ marginTop: "1.5rem", padding: "1rem", border: "1px solid #d9534f", borderRadius: 4 }}>
+            <h3 style={{ marginTop: 0, color: "#d9534f" }}>Cancel Policy</h3>
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+              <label style={{ fontSize: "0.85rem" }}>Cancellation Date (optional):</label>
+              <input
+                type="date"
+                value={cancelDate}
+                onChange={(e) => setCancelDate(e.target.value)}
+                style={{ padding: "0.4rem" }}
+              />
+              <button
+                onClick={handleCancel}
+                disabled={cancelling}
+                style={{ padding: "0.5rem 1rem", backgroundColor: "#d9534f", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
+              >
+                {cancelling ? "Cancelling..." : "Cancel Policy"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {cancelResult && (
+          <div style={{ marginTop: "1rem", padding: "1rem", border: "1px solid #5cb85c", borderRadius: 4, backgroundColor: "#f0fff0" }}>
+            <h4 style={{ marginTop: 0 }}>Cancellation Complete</h4>
+            <p>Unearned Premium: {formatCents(cancelResult.unearned_premium_cents as number)}</p>
+            <p>Refundable Tax: {formatCents(cancelResult.total_refundable_tax_cents as number)}</p>
+            <p>Refundable Fees: {formatCents(cancelResult.total_refundable_fees_cents as number)}</p>
+            <p><strong>Total Refund: {formatCents(cancelResult.total_refund_cents as number)}</strong></p>
+            <p>Commission Clawback: {formatCents(cancelResult.commission_clawback_cents as number)}</p>
+            <button onClick={() => setCancelResult(null)} style={{ fontSize: "0.8rem" }}>Dismiss</button>
+          </div>
+        )}
+
+        {/* Refunds Section */}
+        {refunds.length > 0 && (
+          <div style={{ marginTop: "1.5rem" }}>
+            <h2>Refunds</h2>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ borderBottom: "2px solid #ddd", textAlign: "left" }}>
+                  <th style={{ padding: "0.5rem" }}>ID</th>
+                  <th style={{ padding: "0.5rem" }}>Amount</th>
+                  <th style={{ padding: "0.5rem" }}>Status</th>
+                  <th style={{ padding: "0.5rem" }}>Stripe Ref</th>
+                  <th style={{ padding: "0.5rem" }}>Reason</th>
+                  <th style={{ padding: "0.5rem" }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {refunds.map((r) => (
+                  <tr key={r.id} style={{ borderBottom: "1px solid #eee" }}>
+                    <td style={{ padding: "0.5rem", fontSize: "0.85rem" }}>{r.id}</td>
+                    <td style={{ padding: "0.5rem", fontSize: "0.85rem" }}>{formatCents(r.amount_cents)}</td>
+                    <td style={{ padding: "0.5rem" }}>{statusBadge(r.status)}</td>
+                    <td style={{ padding: "0.5rem", fontSize: "0.75rem", fontFamily: "monospace" }}>
+                      {r.stripe_refund_id}
+                      {r.stripe_refund_id.startsWith("SIMULATED") && (
+                        <span style={{ color: "#f0ad4e", fontWeight: "bold", marginLeft: 4 }}>SIMULATED</span>
+                      )}
+                    </td>
+                    <td style={{ padding: "0.5rem", fontSize: "0.85rem" }}>{r.reason}</td>
+                    <td style={{ padding: "0.5rem" }}>
+                      {r.status === "PENDING" && r.stripe_refund_id.startsWith("SIMULATED") && (
+                        <button
+                          onClick={() => handleSimulateRefund(r.id)}
+                          disabled={simulatingRefund}
+                          style={{ padding: "0.25rem 0.5rem", fontSize: "0.8rem", backgroundColor: "#5cb85c", color: "#fff", border: "none", borderRadius: 3, cursor: "pointer" }}
+                        >
+                          {simulatingRefund ? "..." : "Simulate Success"}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </main>
     </>
   );

@@ -207,6 +207,34 @@ Format:
 - **Alternatives considered:** No limit field (can't enforce PRD requirement), separate limit model (over-engineered for v1).
 - **Impact / follow-up:** Limit is editable via Django admin. Aggregate limits can be added in a future milestone.
 
+## 2026-09-09 06:00 - M6: Pro-rata cancellation with refund-first ledger timing
+- **Decision:** On cancellation, compute pro-rata refund and create a PENDING Refund record with Stripe refund initiated. Ledger entries are only posted when the provider confirms the refund (handle_refund_success), not at cancellation time.
+- **Reason:** PRD rule: "Do not create a ledger row that pretends a refund happened before the rail moved." The ledger must reflect actual financial movements, not intent.
+- **Assumption / evidence:** The same pattern as payment collection — ledger waits for provider confirmation.
+- **Alternatives considered:** Post ledger at cancellation and reverse if refund fails (more complex, violates PRD rule), post refund payable immediately and settle later (overstates obligations).
+- **Impact / follow-up:** Refund webhook (charge.refunded) triggers handle_refund_success which posts the balanced entry.
+
+## 2026-09-09 06:00 - M6: Single refund against initial payment for V1
+- **Decision:** Cancellation refund targets the initial payment only. Multi-payment scenarios (e.g., endorsement increases paid separately) are documented as a V2 edge case.
+- **Reason:** V1 simplicity — the initial payment always covers the full premium. Endorsement premium increases create separate payments, but the vast majority of cancellations occur against the initial payment amount.
+- **Assumption / evidence:** Total refund (unearned premium + refundable tax + refundable fees) will not exceed the initial payment amount for a single-endorsement policy.
+- **Alternatives considered:** Multi-payment waterfall refund (complex, needed only for edge cases where endorsement increases + early cancellation exceed initial payment).
+- **Impact / follow-up:** Document the limitation. If a refund exceeds the initial payment, the system will error — staff must handle manually or V2 implements multi-payment refund.
+
+## 2026-09-09 06:00 - M6: Commission clawback as separate journal entry
+- **Decision:** Commission clawback posts as a separate journal entry (DR 2200 Broker Commission Payable / CR 4200 Commission Clawback) with its own idempotency key, rather than as part of the refund entry.
+- **Reason:** Clawback is a distinct financial event from the premium refund. Separate entries provide clearer audit trail and allow independent verification. Commission Clawback (4200) is a distinct revenue account from Commission Expense (5100).
+- **Assumption / evidence:** Standard insurance accounting separates premium refunds from commission adjustments.
+- **Alternatives considered:** Combined entry (harder to audit), DR 5100 CR 2200 reversal (would net out original commission, less clear).
+- **Impact / follow-up:** Broker statements report clawback and commission separately.
+
+## 2026-09-09 06:00 - M6: Broker statement reproducibility via unique_together
+- **Decision:** BrokerStatement has unique_together on (broker, period_start, period_end). Re-running generation for the same period returns the existing statement unchanged.
+- **Reason:** PRD requires statements to be reproducible. Once generated, the numbers are frozen — even if later refunds occur, they appear in the next period's statement.
+- **Assumption / evidence:** Monthly statements are point-in-time snapshots of the ledger. This matches standard insurance billing cycles.
+- **Alternatives considered:** Regenerate and overwrite (violates reproducibility), version-based (over-engineered for V1).
+- **Impact / follow-up:** If a correction is needed, generate a new statement for a different period.
+
 ## 2026-09-08 18:00 - Milestone reorder: infra and containerization moved to end
 - **Decision:** Moved Django containerization from milestone 2 to milestone 8, and AWS infrastructure from milestone 3 to milestone 9. All feature milestones (2-7) are built and tested locally first.
 - **Reason:** Build all domain features locally before dealing with deployment complexity. Faster iteration during the core build.

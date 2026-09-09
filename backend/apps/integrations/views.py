@@ -16,8 +16,8 @@ from apps.integrations.persona.webhooks import (
     verify_persona_signature,
 )
 from apps.integrations.stripe.webhooks import verify_stripe_signature
-from apps.payments.models import Payment
-from apps.payments.services import handle_payment_failure, handle_payment_success
+from apps.payments.models import Payment, Refund
+from apps.payments.services import handle_payment_failure, handle_payment_success, handle_refund_success
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +127,8 @@ class StripeWebhookView(APIView):
             self._handle_checkout_completed(event_data)
         elif event_type == "checkout.session.expired":
             self._handle_checkout_expired(event_data)
+        elif event_type == "charge.refunded":
+            self._handle_charge_refunded(event_data)
 
     def _handle_checkout_completed(self, event_data):
         session = event_data.get("data", {}).get("object", {})
@@ -158,3 +160,21 @@ class StripeWebhookView(APIView):
             payment_id=payment.id,
             reason="Checkout session expired",
         )
+
+    def _handle_charge_refunded(self, event_data):
+        charge = event_data.get("data", {}).get("object", {})
+        refunds_data = charge.get("refunds", {}).get("data", [])
+
+        for refund_data in refunds_data:
+            stripe_refund_id = refund_data.get("id", "")
+            if not stripe_refund_id:
+                continue
+
+            try:
+                refund = Refund.objects.get(stripe_refund_id=stripe_refund_id)
+            except Refund.DoesNotExist:
+                logger.warning("No refund found for Stripe refund %s", stripe_refund_id)
+                continue
+
+            if refund_data.get("status") == "succeeded":
+                handle_refund_success(refund_id=refund.id)

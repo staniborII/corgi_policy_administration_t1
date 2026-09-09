@@ -60,8 +60,28 @@ Mid-term policy modification with pro-rata pricing.
 - **Threshold**: > $500 total requires customer approval
 - **Pro-rata**: `(annual_delta × remaining_days) / total_days` using Decimal ROUND_HALF_UP
 
-### Payment / Refund
-Payment tracks Stripe payment intents. Refund tracks Stripe refunds linked to a payment.
+### Payment
+Payment tracks Stripe payment intents with full charge breakdown.
+
+### Refund
+Refund tracks Stripe refunds linked to a payment.
+- `status`: PENDING → SUCCEEDED | FAILED
+- `stripe_refund_id`: Provider reference (SIMULATED-rf-xxx when no Stripe key)
+- `charges_snapshot`: JSON with cancellation breakdown (unearned premium, refundable tax/fees, clawback)
+- `reason`: Human-readable reason (e.g., "Pro-rata cancellation as of 2025-07-01")
+- Ledger entries posted only on SUCCEEDED (not at creation)
+- Refund entry: DR 2000/2100/2150 / CR 2400 (reverse unearned liabilities into refund payable)
+- Clawback entry: DR 2200 / CR 4200 (separate journal entry)
+
+### BrokerStatement
+Monthly broker commission statement derived from Payment/Refund records.
+- `total_premium_cents`: Sum of premium collected in period
+- `total_commission_cents`: Commission earned on collected premium
+- `total_clawback_cents`: Commission clawed back from cancellation refunds
+- `net_due_cents`: `commission - clawback`
+- `statement_data`: JSON with payment/refund line items
+- `is_closed`: Whether statement has been finalized
+- **Reproducible**: `unique_together` on (broker, period_start, period_end) — same period returns same result
 
 ### Policy (M5 additions)
 - `coverage_limit_cents`: Per-occurrence limit in integer cents (default $1M)

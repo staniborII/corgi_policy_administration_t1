@@ -110,14 +110,35 @@ sequenceDiagram
 |-------------|--------|
 | `checkout.session.completed` | Find Payment by session_id, post ledger, activate policy |
 | `checkout.session.expired` | Mark Payment as FAILED, policy stays PENDING_PAYMENT for retry |
+| `charge.refunded` | Find Refund by stripe_refund_id, post refund + clawback ledger entries |
+
+### Stripe Refund Flow (Cancellation)
+
+```mermaid
+sequenceDiagram
+    participant API as Django API
+    participant St as Stripe API
+
+    API->>St: stripe.Refund.create(payment_intent, amount)
+    St-->>API: refund object (rf_xxx)
+    API->>API: create Refund record (PENDING)
+
+    St->>API: POST /integrations/webhooks/stripe/ (charge.refunded)
+    API->>API: verify signature
+    API->>API: find Refund by stripe_refund_id
+    API->>API: handle_refund_success (post ledger)
+    API-->>St: 200 OK
+```
 
 ### Simulated Mode
 
 When `STRIPE_SECRET_KEY` is not configured:
 - `create_checkout_session()` returns `SIMULATED-cs-{uuid}` session ID and `#simulated` checkout URL
+- `create_stripe_refund()` returns `SIMULATED-rf-{uuid}` refund ID
 - The SIMULATED prefix is displayed in the UI as a warning label
 - A dedicated `/payments/<id>/simulate/` endpoint completes payment without Stripe
-- Simulated payments follow the same ledger posting and policy activation flow
+- A dedicated `/payments/refunds/<id>/simulate/` endpoint completes refund without Stripe
+- Simulated payments and refunds follow the same ledger posting flows
 
 ### Environment Variables
 

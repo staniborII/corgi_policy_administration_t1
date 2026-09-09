@@ -8,6 +8,7 @@ import {
   type Policy,
   type EndorsementRecord,
   type AsOfSnapshot,
+  type RefundRecord,
   ApiError,
 } from "@/lib/api";
 import Nav from "@/components/Nav";
@@ -61,6 +62,7 @@ function CustomerPolicyDetailContent() {
 
   const [policy, setPolicy] = useState<Policy | null>(null);
   const [endorsements, setEndorsements] = useState<EndorsementRecord[]>([]);
+  const [refunds, setRefunds] = useState<RefundRecord[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState("");
   const [actionLoading, setActionLoading] = useState<number | null>(null);
@@ -86,12 +88,14 @@ function CustomerPolicyDetailContent() {
     if (!policyId) return;
     setLoadingData(true);
     try {
-      const [p, e] = await Promise.all([
+      const [p, e, r] = await Promise.all([
         api.getPolicy(parseInt(policyId, 10)),
         api.listEndorsements(parseInt(policyId, 10)),
+        api.listPolicyRefunds(parseInt(policyId, 10)),
       ]);
       setPolicy(p);
       setEndorsements(e);
+      setRefunds(r);
     } catch {
       setError("Failed to load policy data.");
     } finally {
@@ -336,6 +340,33 @@ function CustomerPolicyDetailContent() {
             </table>
           )}
         </div>
+
+        {/* Refunds */}
+        {refunds.length > 0 && (
+          <div style={{ marginTop: "1.5rem" }}>
+            <h2>Refunds</h2>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ borderBottom: "2px solid #ddd", textAlign: "left" }}>
+                  <th style={{ padding: "0.5rem" }}>Amount</th>
+                  <th style={{ padding: "0.5rem" }}>Status</th>
+                  <th style={{ padding: "0.5rem" }}>Reason</th>
+                  <th style={{ padding: "0.5rem" }}>Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {refunds.map((r) => (
+                  <tr key={r.id} style={{ borderBottom: "1px solid #eee" }}>
+                    <td style={{ padding: "0.5rem", fontSize: "0.85rem" }}>{formatCents(r.amount_cents)}</td>
+                    <td style={{ padding: "0.5rem" }}>{statusBadge(r.status)}</td>
+                    <td style={{ padding: "0.5rem", fontSize: "0.85rem" }}>{r.reason}</td>
+                    <td style={{ padding: "0.5rem", fontSize: "0.85rem" }}>{new Date(r.created_at).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </main>
     </>
   );
