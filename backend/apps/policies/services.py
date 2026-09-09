@@ -1,5 +1,6 @@
 import uuid
 from datetime import date
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.db import transaction
 from django.utils import timezone
@@ -8,32 +9,31 @@ from apps.brokers.models import Broker
 from apps.policies.models import FeeRule, Policy, PolicyEvent
 from apps.policies.selectors import get_applicable_fee_rules, get_applicable_tax_rules
 
+_ONE = Decimal("1")
+_BPS_DIVISOR = Decimal("10000")
+
 
 class PolicyError(Exception):
     pass
 
 
 def calculate_policy_expiration(effective_date: date) -> date:
-    """
-    Calculate expiration using calendar anniversary (same month/day, next year).
-    Feb 29 effective date in a leap year -> Feb 28 in a non-leap year.
-    """
     try:
         return effective_date.replace(year=effective_date.year + 1)
     except ValueError:
         return date(effective_date.year + 1, 2, 28)
 
 
-def calculate_tax_amount(premium_cents, rate_bps):
-    """Calculate tax: (premium * rate_bps) / 10000, rounded to nearest cent."""
-    return round(premium_cents * rate_bps / 10000)
+def calculate_rate_amount(amount_cents: int, rate_bps: int) -> int:
+    """(amount_cents * rate_bps) / 10000, rounded half-up to nearest cent."""
+    result = Decimal(amount_cents) * Decimal(rate_bps) / _BPS_DIVISOR
+    return int(result.quantize(_ONE, rounding=ROUND_HALF_UP))
 
 
-def calculate_fee_amount(fee_rule, premium_cents):
-    """Calculate fee amount from a FeeRule."""
+def calculate_fee_amount(fee_rule: FeeRule, premium_cents: int) -> int:
     if fee_rule.fee_type == FeeRule.FeeType.FLAT:
         return fee_rule.amount_cents or 0
-    return round(premium_cents * (fee_rule.rate_bps or 0) / 10000)
+    return calculate_rate_amount(premium_cents, fee_rule.rate_bps or 0)
 
 
 def compute_policy_charges(*, premium_cents, jurisdiction, effective_date):
@@ -47,7 +47,7 @@ def compute_policy_charges(*, premium_cents, jurisdiction, effective_date):
     tax_details = []
     total_tax = 0
     for rule in tax_rules:
-        amount = calculate_tax_amount(premium_cents, rule.rate_bps)
+        amount = calculate_rate_amount(premium_cents, rule.rate_bps)
         total_tax += amount
         tax_details.append(
             {

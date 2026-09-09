@@ -20,6 +20,7 @@ Every financial transaction is recorded as a journal entry with balanced debit a
 | 1100 | Premium Receivable | Asset | Debit |
 | 2000 | Unearned Premium | Liability | Credit |
 | 2100 | State Premium Tax Payable | Liability | Credit |
+| 2150 | Stamping Fee Payable | Liability | Credit |
 | 2200 | Broker Commission Payable | Liability | Credit |
 | 2300 | Claim Reserve | Liability | Credit |
 | 2400 | Refund Payable | Liability | Credit |
@@ -42,13 +43,13 @@ flowchart LR
     D --> F[Fee Revenue +]
 ```
 
-Journal entry (premium = $1,000, tax = $35, fee = $25):
+Journal entry (TX: premium = $1,000, tax = $48.50, stamping fee = $0.40):
 | Line | Account | Debit | Credit |
 |------|---------|-------|--------|
-| 1 | 1010 Stripe Clearing | 106,000 | |
+| 1 | 1010 Stripe Clearing | 104,890 | |
 | 2 | 2000 Unearned Premium | | 100,000 |
-| 3 | 2100 Tax Payable | | 3,500 |
-| 4 | 4100 Fee Revenue | | 2,500 |
+| 3 | 2100 State Premium Tax Payable | | 4,850 |
+| 4 | 2150 Stamping Fee Payable | | 40 |
 
 ### Correction (Reversal + Re-book)
 
@@ -85,3 +86,14 @@ Tax and fee rules are effective-dated per jurisdiction. Rule selection uses the 
 - Historical policies use the rules that were in effect at their inception
 - A later rate change does not retroactively affect existing policies
 - Tax/fees remain separate financial components from premium
+
+### Texas Surplus-Lines Model (Implemented)
+
+| Component | Rate | Ledger Account | Refundable |
+|-----------|------|---------------|------------|
+| TX Surplus Lines Premium Tax | 4.85% (485 bps) | 2100 State Premium Tax Payable | Yes |
+| TX SLTX Stamping Fee | 0.04% (4 bps) | 2150 Stamping Fee Payable | Yes |
+
+Sources: Texas Comptroller Rule 3.820, SLTX.
+
+All rate calculations use `Decimal` arithmetic with `ROUND_HALF_UP` rounding. Rates stored as integer basis points. `calculate_rate_amount(amount_cents, rate_bps)` computes `(amount_cents × rate_bps) / 10000`.

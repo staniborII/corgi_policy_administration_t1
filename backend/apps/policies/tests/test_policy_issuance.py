@@ -64,84 +64,77 @@ def pending_broker(db):
 
 
 @pytest.fixture
-def ca_tax_rules(db):
+def tx_rules(db):
     TaxRule.objects.create(
-        jurisdiction="CA",
-        name="CA Premium Tax",
+        jurisdiction="TX",
+        name="TX Surplus Lines Premium Tax",
         component_type="TAX",
-        rate_bps=235,
-        effective_from=date(2020, 1, 1),
+        rate_bps=485,
+        effective_from=date(2024, 1, 1),
         is_refundable=True,
     )
-    TaxRule.objects.create(
-        jurisdiction="CA",
-        name="CA FAIR Plan Surcharge",
-        component_type="SURCHARGE",
-        rate_bps=10,
-        effective_from=date(2020, 1, 1),
-        is_refundable=False,
-    )
     FeeRule.objects.create(
-        jurisdiction="CA",
-        name="CA Stamping Fee",
-        fee_type="FLAT",
-        amount_cents=2500,
-        effective_from=date(2020, 1, 1),
-        is_refundable=False,
+        jurisdiction="TX",
+        name="TX SLTX Stamping Fee",
+        fee_type="RATE",
+        rate_bps=4,
+        effective_from=date(2024, 1, 1),
+        is_refundable=True,
     )
 
 
 class TestPolicyIssuance:
-    def test_issue_with_approved_broker(self, approved_broker, customer_user, ca_tax_rules):
+    def test_issue_with_approved_broker(self, approved_broker, customer_user, tx_rules):
         policy, charges = issue_policy(
             customer=customer_user,
             broker_id=approved_broker.id,
             effective_date=date(2025, 6, 1),
             premium_amount_cents=100000,
-            coverage_territory="CA",
+            coverage_territory="TX",
         )
         assert policy.status == Policy.Status.DRAFT
         assert policy.expiration_date == date(2026, 6, 1)
         assert policy.premium_amount_cents == 100000
 
-    def test_non_approved_broker_blocked(self, pending_broker, customer_user, ca_tax_rules):
+    def test_non_approved_broker_blocked(self, pending_broker, customer_user, tx_rules):
         with pytest.raises(PolicyError, match="non-approved"):
             issue_policy(
                 customer=customer_user,
                 broker_id=pending_broker.id,
                 effective_date=date(2025, 6, 1),
                 premium_amount_cents=100000,
-                coverage_territory="CA",
+                coverage_territory="TX",
             )
 
-    def test_policy_end_date_uses_anniversary(self, approved_broker, customer_user, ca_tax_rules):
+    def test_policy_end_date_uses_anniversary(self, approved_broker, customer_user, tx_rules):
         policy, _ = issue_policy(
             customer=customer_user,
             broker_id=approved_broker.id,
             effective_date=date(2024, 2, 29),
             premium_amount_cents=50000,
-            coverage_territory="CA",
+            coverage_territory="TX",
         )
         assert policy.expiration_date == date(2025, 2, 28)
 
-    def test_charges_breakdown(self, ca_tax_rules, db):
+    def test_tx_charges_breakdown(self, tx_rules, db):
+        """$1,000.00 premium: tax=4850, fee=40, total=104890."""
         charges = compute_policy_charges(
             premium_cents=100000,
-            jurisdiction="CA",
+            jurisdiction="TX",
             effective_date=date(2025, 1, 1),
         )
         assert charges["premium_cents"] == 100000
-        assert charges["total_tax_cents"] == 2350 + 100  # 2.35% + 0.10%
-        assert charges["total_fees_cents"] == 2500  # $25 flat
-        assert charges["total_cents"] == 100000 + 2450 + 2500
+        assert charges["total_tax_cents"] == 4850
+        assert charges["total_fees_cents"] == 40
+        assert charges["total_cents"] == 104890
 
-    def test_creates_policy_event(self, approved_broker, customer_user, ca_tax_rules):
+    def test_creates_policy_event(self, approved_broker, customer_user, tx_rules):
         policy, _ = issue_policy(
             customer=customer_user,
             broker_id=approved_broker.id,
             effective_date=date(2025, 7, 1),
             premium_amount_cents=80000,
-            coverage_territory="CA",
+            coverage_territory="TX",
         )
         assert policy.events.count() == 1
         event = policy.events.first()
@@ -150,7 +143,7 @@ class TestPolicyIssuance:
 
 
 class TestPolicyAPI:
-    def test_create_policy_via_api(self, api, staff_user, customer_user, approved_broker, ca_tax_rules):
+    def test_create_policy_via_api(self, api, staff_user, customer_user, approved_broker, tx_rules):
         api.force_authenticate(user=staff_user)
         resp = api.post(
             "/api/policies/",
@@ -159,14 +152,14 @@ class TestPolicyAPI:
                 "broker_id": approved_broker.id,
                 "effective_date": "2025-06-01",
                 "premium_amount_cents": 100000,
-                "coverage_territory": "CA",
+                "coverage_territory": "TX",
             },
         )
         assert resp.status_code == 201
         assert resp.data["policy"]["status"] == "DRAFT"
         assert "charges" in resp.data
 
-    def test_customer_sees_own_policy(self, api, staff_user, customer_user, approved_broker, ca_tax_rules):
+    def test_customer_sees_own_policy(self, api, staff_user, customer_user, approved_broker, tx_rules):
         api.force_authenticate(user=staff_user)
         resp = api.post(
             "/api/policies/",
@@ -175,7 +168,7 @@ class TestPolicyAPI:
                 "broker_id": approved_broker.id,
                 "effective_date": "2025-06-01",
                 "premium_amount_cents": 100000,
-                "coverage_territory": "CA",
+                "coverage_territory": "TX",
             },
         )
         policy_id = resp.data["policy"]["id"]
@@ -187,7 +180,7 @@ class TestPolicyAPI:
         assert resp.data[0]["id"] == policy_id
 
     def test_customer_cannot_see_other_policy(
-        self, api, staff_user, customer_user, other_customer, approved_broker, ca_tax_rules
+        self, api, staff_user, customer_user, other_customer, approved_broker, tx_rules
     ):
         api.force_authenticate(user=staff_user)
         resp = api.post(
@@ -197,7 +190,7 @@ class TestPolicyAPI:
                 "broker_id": approved_broker.id,
                 "effective_date": "2025-06-01",
                 "premium_amount_cents": 100000,
-                "coverage_territory": "CA",
+                "coverage_territory": "TX",
             },
         )
         policy_id = resp.data["policy"]["id"]
@@ -206,7 +199,7 @@ class TestPolicyAPI:
         resp = api.get(f"/api/policies/{policy_id}/")
         assert resp.status_code == 404
 
-    def test_staff_sees_all_policies(self, api, staff_user, customer_user, approved_broker, ca_tax_rules):
+    def test_staff_sees_all_policies(self, api, staff_user, customer_user, approved_broker, tx_rules):
         api.force_authenticate(user=staff_user)
         api.post(
             "/api/policies/",
@@ -215,7 +208,7 @@ class TestPolicyAPI:
                 "broker_id": approved_broker.id,
                 "effective_date": "2025-06-01",
                 "premium_amount_cents": 100000,
-                "coverage_territory": "CA",
+                "coverage_territory": "TX",
             },
         )
         resp = api.get("/api/policies/")

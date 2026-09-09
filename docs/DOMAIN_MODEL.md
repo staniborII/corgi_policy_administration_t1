@@ -65,6 +65,15 @@ Double-entry append-only ledger. See [MONEY_FLOWS.md](MONEY_FLOWS.md).
 ### TaxRule / FeeRule
 Effective-dated tax and fee rules per jurisdiction. Historical rules preserved for accurate reconstruction.
 
+**Implemented: Texas surplus-lines model**
+
+| Component | Model | Type | Rate | Refundable | Effective |
+|-----------|-------|------|------|------------|-----------|
+| TX Surplus Lines Premium Tax | TaxRule | TAX | 485 bps (4.85%) | Yes | 2024-01-01 |
+| TX SLTX Stamping Fee | FeeRule | RATE | 4 bps (0.04%) | Yes | 2024-01-01 |
+
+Rate arithmetic uses `Decimal` with `ROUND_HALF_UP` via `calculate_rate_amount(amount_cents, rate_bps)`. No Python `float` in financial calculations.
+
 ### Approval
 Generic maker-checker approval using Django's ContentType framework.
 

@@ -128,8 +128,8 @@ uv run python manage.py seed_demo
 This creates:
 - **Staff users**: staff1/staffpass1, staff2/staffpass2
 - **Customer user**: customer1/custpass1
-- **CA tax rules**: Premium Tax (2.35%), FAIR Plan Surcharge (0.10%), Stamping Fee ($25.00)
-- **Chart of accounts**: 13 ledger accounts
+- **TX tax rules**: Surplus Lines Premium Tax (4.85%), SLTX Stamping Fee (0.04%)
+- **Chart of accounts**: 14 ledger accounts (including Stamping Fee Payable)
 
 ## Key documents
 

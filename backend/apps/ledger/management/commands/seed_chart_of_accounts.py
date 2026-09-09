@@ -10,6 +10,7 @@ CHART_OF_ACCOUNTS = [
     # Liabilities (normal balance: CREDIT)
     ("2000", "Unearned Premium", "LIABILITY", "CREDIT"),
     ("2100", "State Premium Tax Payable", "LIABILITY", "CREDIT"),
+    ("2150", "Stamping Fee Payable", "LIABILITY", "CREDIT"),
     ("2200", "Broker Commission Payable", "LIABILITY", "CREDIT"),
     ("2300", "Claim Reserve", "LIABILITY", "CREDIT"),
     ("2400", "Refund Payable", "LIABILITY", "CREDIT"),

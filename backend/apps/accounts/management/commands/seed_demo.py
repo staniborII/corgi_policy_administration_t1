@@ -8,15 +8,15 @@ from apps.policies.models import FeeRule, TaxRule
 
 
 class Command(BaseCommand):
-    help = "Seed demo users and California tax/fee rules"
+    help = "Seed demo users and Texas surplus-lines tax/fee rules"
 
     def handle(self, *args, **options):
         call_command("seed_chart_of_accounts")
         self.stdout.write("")
 
         self._seed_users()
-        self._seed_tax_rules()
-        self._seed_fee_rules()
+        self._seed_tx_tax_rules()
+        self._seed_tx_fee_rules()
 
         self.stdout.write(self.style.SUCCESS("\nDemo seed complete."))
 
@@ -65,42 +65,30 @@ class Command(BaseCommand):
             else:
                 self.stdout.write(f"  Exists: {username}")
 
-    def _seed_tax_rules(self):
-        self.stdout.write("Seeding California tax rules...")
+    def _seed_tx_tax_rules(self):
+        self.stdout.write("Seeding Texas surplus-lines tax rules...")
         _, created = TaxRule.objects.get_or_create(
-            jurisdiction="CA",
-            name="CA Premium Tax",
-            effective_from=date(2020, 1, 1),
+            jurisdiction="TX",
+            name="TX Surplus Lines Premium Tax",
+            effective_from=date(2024, 1, 1),
             defaults={
                 "component_type": TaxRule.ComponentType.TAX,
-                "rate_bps": 235,
+                "rate_bps": 485,
                 "is_refundable": True,
             },
         )
-        self.stdout.write(f"  {'Created' if created else 'Exists'}: CA Premium Tax (2.35%)")
+        self.stdout.write(f"  {'Created' if created else 'Exists'}: TX Surplus Lines Premium Tax (4.85%)")
 
-        _, created = TaxRule.objects.get_or_create(
-            jurisdiction="CA",
-            name="CA FAIR Plan Surcharge",
-            effective_from=date(2020, 1, 1),
-            defaults={
-                "component_type": TaxRule.ComponentType.SURCHARGE,
-                "rate_bps": 10,
-                "is_refundable": False,
-            },
-        )
-        self.stdout.write(f"  {'Created' if created else 'Exists'}: CA FAIR Plan Surcharge (0.10%)")
-
-    def _seed_fee_rules(self):
-        self.stdout.write("Seeding California fee rules...")
+    def _seed_tx_fee_rules(self):
+        self.stdout.write("Seeding Texas surplus-lines fee rules...")
         _, created = FeeRule.objects.get_or_create(
-            jurisdiction="CA",
-            name="CA Stamping Fee",
-            effective_from=date(2020, 1, 1),
+            jurisdiction="TX",
+            name="TX SLTX Stamping Fee",
+            effective_from=date(2024, 1, 1),
             defaults={
-                "fee_type": FeeRule.FeeType.FLAT,
-                "amount_cents": 2500,
-                "is_refundable": False,
+                "fee_type": FeeRule.FeeType.RATE,
+                "rate_bps": 4,
+                "is_refundable": True,
             },
         )
-        self.stdout.write(f"  {'Created' if created else 'Exists'}: CA Stamping Fee ($25.00)")
+        self.stdout.write(f"  {'Created' if created else 'Exists'}: TX SLTX Stamping Fee (0.04%)")
