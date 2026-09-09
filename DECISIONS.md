@@ -297,3 +297,59 @@ Format:
 - **Assumption / evidence:** Local development with SQLite/PostgreSQL is sufficient for feature validation. T+24 gate shifts to after deployment milestones.
 - **Alternatives considered:** Original order (containerize early, deploy early for T+24 gate mid-build).
 - **Impact / follow-up:** T+24 deployed proof happens after milestone 9 instead of mid-build. Updated in 00_MASTER_PLAN.md.
+
+## 2026-09-09 00:00 - Multi-stack CDK architecture for AWS infrastructure
+- **Decision:** Split infrastructure into 4 CDK stacks: CorgiNetwork, CorgiDatabase, CorgiEcs, CorgiFrontend. Cross-stack references via exported properties.
+- **Reason:** Multi-stack design provides blast-radius isolation (network changes don't force database redeployment), clearer ownership boundaries, and independent deployment lifecycle per tier.
+- **Assumption / evidence:** CDK handles cross-stack CloudFormation exports/imports automatically. All stacks successfully synthesize to CloudFormation templates.
+- **Alternatives considered:** Single monolithic stack (simpler but no blast-radius isolation), 3 stacks (merged ECS+Database — loses isolation benefit).
+- **Impact / follow-up:** Stacks must be deployed in dependency order: Network → Database → ECS → Frontend → CI.
+
+## 2026-09-09 00:00 - Security group chain via NetworkStack to break circular dependency
+- **Decision:** ALB and ECS security groups are created in NetworkStack rather than EcsStack, even though they logically belong to the compute tier.
+- **Reason:** DatabaseStack needs the ECS SG to configure ingress rules, while EcsStack needs DB resources from DatabaseStack. Creating SGs in NetworkStack breaks this circular dependency.
+- **Assumption / evidence:** CDK prohibits circular cross-stack references. The SG-in-network pattern is a standard CDK workaround documented in AWS best practices.
+- **Alternatives considered:** Single combined Database+ECS stack (loses isolation), SSM parameter-based SG sharing (more complex, same result).
+- **Impact / follow-up:** SG rule chain: ALB SG → ECS SG (8000) → RDS Proxy SG (5432) → RDS SG (5432). No direct ECS→RDS path.
+
+## 2026-09-09 00:00 - Trial cost trade-offs documented in CDK
+- **Decision:** 1 NAT Gateway, 1 ECS task, Single-AZ RDS (t4g.micro), no deletion protection. All trade-offs annotated in code.
+- **Reason:** Trial environment does not require production HA. Savings estimated at ~$50/month.
+- **Assumption / evidence:** Single-AZ failure during a 48-hour trial is acceptable risk. All trade-offs are marked in code comments and documented in ARCHITECTURE.md.
+- **Alternatives considered:** Full HA setup (2 NAT, Multi-AZ RDS, 2+ ECS tasks) — overkill for trial.
+- **Impact / follow-up:** Production promotion checklist must convert these to HA settings.
+
+## 2026-09-09 00:00 - All secrets in Secrets Manager, injected as ECS container secrets
+- **Decision:** Two Secrets Manager secrets: `corgi/database` (auto-generated DB credentials enriched by RDS with host/port/dbname) and `corgi/app` (Django secret key, superuser credentials, Stripe keys, Persona keys). All injected into ECS containers via `ecs.Secret.fromSecretsManager()`.
+- **Reason:** No secrets in code, no secrets baked into Docker images, no environment files to manage. DB password is auto-generated (32-char, no punctuation). Operator updates provider keys in AWS Console after initial deployment.
+- **Assumption / evidence:** ECS natively supports Secrets Manager injection into container env vars. RDS `Credentials.fromSecret()` automatically enriches the secret with connection metadata.
+- **Alternatives considered:** SSM Parameter Store (no auto-rotation), env files in S3 (harder to audit), single monolithic secret (harder to scope IAM permissions per concern).
+- **Impact / follow-up:** After `cdk deploy`, operator must update `corgi/app` secret values in AWS Console before the Django container will fully function.
+
+## 2026-09-09 00:00 - No CI/CD stack, local deployment
+- **Decision:** Removed CiStack (GitHub OIDC, deploy role). Deployment to AWS will be handled locally by the operator.
+- **Reason:** Trial scope does not require automated CI/CD pipeline. Local deployment via AWS CLI/CDK is sufficient.
+- **Assumption / evidence:** Operator has AWS credentials configured locally.
+- **Alternatives considered:** GitHub Actions OIDC (deferred to post-trial if needed).
+- **Impact / follow-up:** Deployment steps documented in README.
+
+## 2026-09-09 00:00 - Config-driven infrastructure via config.yaml
+- **Decision:** All environment-specific infrastructure values (sizing, DNS, secrets ARNs) are centralized in `infra/config.yaml` with per-environment sections (staging, production). Loaded by `infra/lib/config.ts` at synth time. Deploy with `-c stage=staging`.
+- **Reason:** Avoids scattered `process.env` reads (as seen in the FlexxyDrive reference stack where 80+ env vars were destructured). Config-as-code is auditable, versionable, and self-documenting.
+- **Assumption / evidence:** YAML is human-readable and widely supported. `js-yaml` is a mature parser. Tests pass props directly (no YAML dependency in tests).
+- **Alternatives considered:** CDK context only (limited structure), `.env` files (not typed), SSM Parameter Store (requires AWS for synth).
+- **Impact / follow-up:** Operator fills in account/region and DNS fields in config.yaml before deploying. Empty fields produce working infrastructure with default AWS-assigned URLs.
+
+## 2026-09-09 00:00 - Optional Route 53 and ACM for custom domains
+- **Decision:** When `hostedZoneId`, `hostedZoneName`, `certificateArn`, and domain names are provided in config.yaml, Route 53 A-record aliases and HTTPS are configured automatically. When omitted, default CloudFront distribution URL and ALB DNS name are used.
+- **Reason:** Not all environments need custom domains (e.g., trial/dev). Route 53 costs $0.50/mo per hosted zone. Making it optional keeps the trial cheap while supporting production domains.
+- **Assumption / evidence:** Route 53 alias records work at zone apex (unlike CNAME). ACM certificates must be in us-east-1 for CloudFront.
+- **Alternatives considered:** Always require Route 53 (blocks domain-less trial deploys), external DNS only (loses alias record benefits).
+- **Impact / follow-up:** CloudFront custom domain requires certificate. ALB gets HTTPS listener + HTTP-to-HTTPS redirect when certificate is provided.
+
+## 2026-09-09 00:00 - ALB changed from internal to public-facing
+- **Decision:** The Application Load Balancer is now internet-facing in public subnets, giving it a publicly resolvable DNS name.
+- **Reason:** An internal ALB's DNS resolves to private IPs, which CloudFront cannot reach as an HTTP origin. Making it public fixes the CloudFront→ALB origin path and also provides a direct API URL (useful for webhook providers like Stripe/Persona and direct API access).
+- **Assumption / evidence:** The FlexxyDrive reference stack uses public ALBs for the same reason. CloudFront VPC origins (alternative) require additional setup and are less mature.
+- **Alternatives considered:** CloudFront VPC origins (newer feature, more complex), keep internal + VPN for API access (blocks webhook providers).
+- **Impact / follow-up:** ALB is publicly accessible. WAF can be added to ALB for direct-access protection in production.

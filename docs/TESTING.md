@@ -110,6 +110,25 @@ docker compose exec backend env | grep -iE '(sk_live|AKIA|password)' || echo "No
 docker compose down -v
 ```
 
+## Infrastructure Tests (CDK)
+
+```bash
+cd infra
+npm test            # Jest CDK assertions
+npx cdk synth       # CloudFormation template generation
+```
+
+### CDK Test Coverage
+
+| Stack | Tests | Key Assertions |
+|-------|-------|----------------|
+| NetworkStack | 3 | VPC CIDR 10.0.0.0/16, 1 NAT gateway (trial trade-off), 5 VPC endpoints |
+| DatabaseStack | 4 | PostgreSQL engine + encryption + single-AZ, RDS Proxy with TLS, DB secret with auto-gen password, instance type from config |
+| EcsStack | 6 | Cluster exists, configured Fargate task count, ECR repo with scan-on-push, public-facing ALB, app secrets, Route 53 record when domain configured |
+| FrontendStack | 4 | S3 private bucket (all public access blocked), CloudFront distribution, WAF CLOUDFRONT scope, Route 53 record when domain configured |
+
+**Total: 17 CDK tests + 188 backend tests = 205 tests**
+
 ## Linting & Formatting
 
 ```bash

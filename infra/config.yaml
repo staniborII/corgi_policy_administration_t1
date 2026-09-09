@@ -1,0 +1,56 @@
+environments:
+  staging:
+    project: corgi
+    owner: corgi-insurance
+
+    # AWS account and region
+    account: ""
+    region: us-east-1
+
+    # DNS (optional - leave empty to use default CloudFront/ALB URLs)
+    # When hostedZoneId, hostedZoneName, and certificateArn are all provided,
+    # Route 53 alias records and HTTPS are configured automatically.
+    # Certificate must be in us-east-1 for CloudFront.
+    webDomainName: ""
+    serverDomainName: ""
+    hostedZoneId: ""
+    hostedZoneName: ""
+    certificateArn: ""
+
+    # Network
+    allowedIps:
+      - 0.0.0.0/0
+
+    # ECS compute
+    cpu: 256
+    memory: 512
+    desiredCount: 1
+
+    # RDS
+    dbInstanceType: t4g.micro
+    dbMultiAz: false
+    dbAllocatedStorage: 20
+
+  production:
+    project: corgi
+    owner: corgi-insurance
+
+    account: ""
+    region: us-east-1
+
+    webDomainName: ""
+    serverDomainName: ""
+    hostedZoneId: ""
+    hostedZoneName: ""
+    certificateArn: ""
+
+    allowedIps:
+      - 0.0.0.0/0
+
+    cpu: 512
+    memory: 1024
+    desiredCount: 2
+
+    dbInstanceType: t4g.small
+    dbMultiAz: true
+    dbAllocatedStorage: 50

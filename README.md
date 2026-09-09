@@ -4,13 +4,13 @@ A focused policy-administration system for Commercial General Liability insuranc
 
 ## Status
 
-Milestone 8 — Django Docker containerization.
+Milestone 9 — AWS infrastructure foundation.
 
 ## Structure
 
 - `backend/` — Django + Django REST Framework (Python, managed by uv)
 - `frontend/` — Next.js + TypeScript (static export)
-- `infra/` — AWS CDK (infrastructure, added in later milestones)
+- `infra/` — AWS CDK TypeScript (4-stack infrastructure)
 - `docs/` — Architecture, domain model, state machines, money flows
 - `project_management_docs_and_prompts/` — PRDs, prompts, engineering standards
 
@@ -136,15 +136,56 @@ The `migrate` service runs as a one-off task (uses `profiles: [migrate]`), not o
 ### Running tests
 
 ```bash
-# Backend
+# Backend (188 tests)
 cd backend
 uv run pytest
+
+# Infrastructure (17 CDK tests)
+cd infra
+npm test
 
 # Frontend
 cd frontend
 npm run typecheck
 npm run lint
 ```
+
+## AWS Infrastructure
+
+Infrastructure is defined as CDK TypeScript in `infra/` with a 4-stack architecture (Network, Database, ECS, Frontend). All environment-specific values live in `infra/config.yaml`.
+
+### Quick start
+
+```bash
+cd infra
+npm install
+
+# Synth CloudFormation templates (no AWS credentials needed)
+npx cdk synth -c stage=staging
+
+# Deploy (requires AWS credentials + account in config.yaml)
+npx cdk deploy --all -c stage=staging
+```
+
+### Configuration
+
+Edit `infra/config.yaml` to set per-environment values:
+
+| Field | Purpose |
+|-------|---------|
+| `account`, `region` | AWS target (leave empty for environment-agnostic synth) |
+| `webDomainName` | Custom domain for CloudFront (e.g., `app.corgi.example.com`) |
+| `serverDomainName` | Custom domain for ALB API (e.g., `api.corgi.example.com`) |
+| `hostedZoneId`, `hostedZoneName` | Route 53 hosted zone for DNS records |
+| `certificateArn` | ACM certificate ARN (must be in us-east-1 for CloudFront) |
+| `cpu`, `memory`, `desiredCount` | ECS task sizing |
+| `dbInstanceType`, `dbMultiAz`, `dbAllocatedStorage` | RDS sizing |
+
+**Custom domains are optional.** Leave DNS fields empty to use default CloudFront and ALB URLs. When `certificateArn`, `hostedZoneId`, `hostedZoneName`, and domain names are all provided, Route 53 alias records and HTTPS are configured automatically.
+
+### Post-deployment
+
+After the first `cdk deploy`, update the `corgi/app` secret in AWS Secrets Manager with real values for Django secret key, superuser credentials, Stripe keys, and Persona keys.
 
 ## Commit conventions
 
