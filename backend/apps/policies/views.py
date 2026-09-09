@@ -4,7 +4,7 @@ from rest_framework.views import APIView
 
 from apps.accounts.models import User
 from apps.accounts.permissions import IsStaffUser
-from apps.policies.models import Policy
+from apps.policies.models import FeeRule, Policy, TaxRule
 from apps.policies.serializers import CreatePolicySerializer, PolicyDetailSerializer, PolicySerializer
 from apps.policies.services import PolicyError, issue_policy
 
@@ -49,6 +49,16 @@ class PolicyListView(APIView):
             {"policy": PolicySerializer(policy).data, "charges": charges},
             status=status.HTTP_201_CREATED,
         )
+
+
+class JurisdictionListView(APIView):
+    """Return jurisdictions that have configured tax or fee rules."""
+
+    def get(self, request):
+        tax_jurisdictions = set(TaxRule.objects.values_list("jurisdiction", flat=True).distinct())
+        fee_jurisdictions = set(FeeRule.objects.values_list("jurisdiction", flat=True).distinct())
+        all_jurisdictions = sorted(tax_jurisdictions | fee_jurisdictions)
+        return Response(all_jurisdictions)
 
 
 class PolicyDetailView(APIView):

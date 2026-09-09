@@ -60,7 +60,73 @@ When `PERSONA_API_KEY` or `PERSONA_TEMPLATE_ID` is not configured:
 
 ## Stripe (Premium Collection)
 
-Not yet implemented. Will be added in Milestone 3.
+### Flow
+
+```mermaid
+sequenceDiagram
+    participant C as Customer UI
+    participant API as Django API
+    participant St as Stripe API
+
+    C->>API: POST /payments/checkout/ {policy_id}
+    API->>API: compute charges (premium + tax + fees)
+    API->>St: stripe.checkout.Session.create()
+    St-->>API: {session_id, url}
+    API->>API: create Payment record (PENDING)
+    API->>API: transition Policy DRAFT → PENDING_PAYMENT
+    API-->>C: {checkout_url, session_id, simulated}
+    C->>St: redirect to Checkout URL
+
+    Note over St: Customer completes payment on Stripe-hosted page
+
+    St->>API: POST /integrations/webhooks/stripe/ (checkout.session.completed)
+    API->>API: verify stripe.Webhook.construct_event signature
+    API->>API: record_webhook_event (idempotent)
+    API->>API: handle_payment_success
+    API->>API: post ledger entries (premium, tax, fees, commission)
+    API->>API: activate policy
+    API-->>St: 200 OK
+
+    C->>C: redirect to /customer/payment-success
+```
+
+### Webhook Security
+
+- **Signature verification**: `stripe.Webhook.construct_event()` using `STRIPE_WEBHOOK_SECRET`
+- **No auth required**: Endpoint uses `AllowAny` permission, CSRF exempt
+- **Dev mode**: When `STRIPE_WEBHOOK_SECRET` is not configured, signature verification is bypassed (returns True)
+
+### Idempotency
+
+- Each webhook event has a unique `id` field from Stripe (e.g., `evt_...`)
+- `WebhookEvent.idempotency_key` = `STRIPE-{event_id}` (unique constraint)
+- Duplicate delivery returns 200 — no re-processing
+- Payment-level idempotency: `handle_payment_success` returns early if payment already SUCCEEDED
+- Ledger-level idempotency: journal entries use `idempotency_key` = `premium-collection-{payment_id}` and `commission-{payment_id}`
+
+### Handled Webhook Events
+
+| Stripe Event | Action |
+|-------------|--------|
+| `checkout.session.completed` | Find Payment by session_id, post ledger, activate policy |
+| `checkout.session.expired` | Mark Payment as FAILED, policy stays PENDING_PAYMENT for retry |
+
+### Simulated Mode
+
+When `STRIPE_SECRET_KEY` is not configured:
+- `create_checkout_session()` returns `SIMULATED-cs-{uuid}` session ID and `#simulated` checkout URL
+- The SIMULATED prefix is displayed in the UI as a warning label
+- A dedicated `/payments/<id>/simulate/` endpoint completes payment without Stripe
+- Simulated payments follow the same ledger posting and policy activation flow
+
+### Environment Variables
+
+| Variable | Purpose |
+|----------|---------|
+| `STRIPE_SECRET_KEY` | Stripe API secret key (test or live mode) |
+| `STRIPE_PUBLISHABLE_KEY` | Stripe publishable key (passed to frontend) |
+| `STRIPE_WEBHOOK_SECRET` | Webhook endpoint signing secret |
+| `FRONTEND_URL` | Base URL for Checkout success/cancel redirects (default: `http://localhost:3000`) |
 
 ## Webhook Event Model
 

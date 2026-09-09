@@ -37,12 +37,13 @@ export default function StaffPoliciesPage() {
   const [error, setError] = useState("");
   const [showCreate, setShowCreate] = useState(false);
 
+  const [jurisdictions, setJurisdictions] = useState<string[]>([]);
   const [form, setForm] = useState({
     customer_id: "",
     broker_id: "",
     effective_date: "",
     premium_amount_cents: "",
-    coverage_territory: "CA",
+    coverage_territory: "",
   });
   const [createError, setCreateError] = useState("");
   const [creating, setCreating] = useState(false);
@@ -60,9 +61,10 @@ export default function StaffPoliciesPage() {
   async function loadData() {
     setLoadingData(true);
     try {
-      const [p, b] = await Promise.all([api.listPolicies(), api.listBrokers()]);
+      const [p, b, j] = await Promise.all([api.listPolicies(), api.listBrokers(), api.listJurisdictions()]);
       setPolicies(p);
       setBrokers(b);
+      setJurisdictions(j);
     } catch {
       setError("Failed to load data.");
     } finally {
@@ -163,13 +165,20 @@ export default function StaffPoliciesPage() {
             </div>
             <div style={{ marginBottom: "0.75rem" }}>
               <label style={{ display: "block", marginBottom: 2, fontSize: "0.85rem" }}>Coverage Territory</label>
-              <input
+              <select
                 value={form.coverage_territory}
                 onChange={(e) => setForm({ ...form, coverage_territory: e.target.value })}
                 required
-                maxLength={2}
                 style={{ width: "100%", padding: "0.4rem", boxSizing: "border-box" }}
-              />
+              >
+                <option value="">Select jurisdiction...</option>
+                {jurisdictions.map((j) => (
+                  <option key={j} value={j}>{j}</option>
+                ))}
+              </select>
+              {jurisdictions.length === 0 && !loadingData && (
+                <p style={{ color: "#f0ad4e", fontSize: "0.85rem" }}>No jurisdictions configured. Add tax/fee rules in the admin panel.</p>
+              )}
             </div>
             {createError && <p style={{ color: "red", fontSize: "0.85rem" }}>{createError}</p>}
             <button type="submit" disabled={creating} style={{ padding: "0.5rem 1rem" }}>

@@ -12,6 +12,8 @@ class Payment(models.Model):
     amount_cents = models.PositiveIntegerField()
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     stripe_payment_intent_id = models.CharField(max_length=255, blank=True)
+    stripe_checkout_session_id = models.CharField(max_length=255, blank=True)
+    charges_snapshot = models.JSONField(null=True, blank=True)
     idempotency_key = models.CharField(max_length=255, unique=True, null=True, blank=True)
     effective_at = models.DateTimeField()
     recorded_at = models.DateTimeField(auto_now_add=True)

@@ -121,4 +121,10 @@ CORS_ALLOWED_ORIGINS = [
 PERSONA_API_KEY = os.environ.get("PERSONA_API_KEY", "")
 PERSONA_WEBHOOK_SECRET = os.environ.get("PERSONA_WEBHOOK_SECRET", "")
 PERSONA_TEMPLATE_ID = os.environ.get("PERSONA_TEMPLATE_ID", "")
-PERSONA_API_BASE = "https://withpersona.com/api/v1"
+PERSONA_API_BASE = os.environ.get("PERSONA_API_BASE", "https://withpersona.com/api/v1")
+
+# Stripe
+STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
+STRIPE_PUBLISHABLE_KEY = os.environ.get("STRIPE_PUBLISHABLE_KEY", "")
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")

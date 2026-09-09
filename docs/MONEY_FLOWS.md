@@ -32,15 +32,14 @@ Every financial transaction is recorded as a journal entry with balanced debit a
 
 ## Key Financial Flows
 
-### Policy Premium Collection
+### Policy Premium Collection (via Stripe Checkout)
 
 ```mermaid
 flowchart LR
-    A[Customer pays] --> B[Stripe Clearing +]
-    B --> C[Premium Receivable -]
-    C --> D[Unearned Premium +]
-    D --> E[Tax Payable +]
-    D --> F[Fee Revenue +]
+    A[Customer pays via Stripe] --> B[Stripe Clearing +]
+    B --> C[Unearned Premium +]
+    B --> D[Tax Payable +]
+    B --> E[Stamping Fee Payable +]
 ```
 
 Journal entry (TX: premium = $1,000, tax = $48.50, stamping fee = $0.40):
@@ -69,15 +68,21 @@ flowchart LR
     C --> D[Cash -]
 ```
 
-### Commission
+### Broker Commission (posted at payment time)
+
+Journal entry (15% on $1,000 premium = $150):
+| Line | Account | Debit | Credit |
+|------|---------|-------|--------|
+| 1 | 5100 Commission Expense | 15,000 | |
+| 2 | 2200 Broker Commission Payable | | 15,000 |
 
 ```mermaid
 flowchart LR
-    A[Policy bound] --> B[Commission Payable +]
-    B --> C[Commission Expense +]
+    A[Payment succeeds] --> B[Commission Expense +]
+    B --> C[Commission Payable +]
 ```
 
-On cancellation, commission clawback reverses the commission.
+Commission is earned on collected premium only (not on tax/fees). Posted in the same transaction as the premium collection ledger entries. On cancellation, commission clawback reverses the commission.
 
 ## Tax and Fee Rules
 

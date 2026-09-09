@@ -85,8 +85,28 @@ stateDiagram-v2
 
 ```mermaid
 stateDiagram-v2
-    [*] --> PENDING
-    PENDING --> PROCESSING : Stripe intent created
-    PROCESSING --> SUCCEEDED : payment confirmed
-    PROCESSING --> FAILED : payment failed
+    [*] --> PENDING : Checkout Session created
+    PENDING --> SUCCEEDED : checkout.session.completed webhook
+    PENDING --> FAILED : checkout.session.expired or decline
+```
+
+Payment uses Stripe Checkout Sessions (redirect flow). The PENDING state represents a Checkout Session that the customer has been redirected to. Success is confirmed via the `checkout.session.completed` webhook, which triggers ledger posting and policy activation.
+
+### Payment + Policy Interaction
+
+```mermaid
+sequenceDiagram
+    participant Policy
+    participant Payment
+    participant Ledger
+
+    Note over Policy: DRAFT
+    Policy->>Payment: create_checkout_for_policy
+    Note over Payment: PENDING
+    Note over Policy: PENDING_PAYMENT
+    Payment->>Ledger: handle_payment_success
+    Note over Ledger: DR 1010 / CR 2000,2100,2150
+    Note over Ledger: DR 5100 / CR 2200 (commission)
+    Note over Payment: SUCCEEDED
+    Note over Policy: ACTIVE
 ```

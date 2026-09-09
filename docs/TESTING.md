@@ -31,6 +31,8 @@ backend/
 │   ├── ledger/tests/
 │   │   ├── test_posting.py        # Journal entry posting, balance, idempotency
 │   │   └── test_reversal.py       # Reversal, correction flow
+│   ├── payments/tests/
+│   │   └── test_payment_flow.py   # Checkout, success, failure, ledger, commission, webhook, API
 │   └── policies/tests/
 │       ├── test_policy_issuance.py # Issuance, approved broker guard, charges, API
 │       ├── test_policy_term.py     # Calendar anniversary logic
@@ -46,8 +48,9 @@ backend/
 | Webhook | 4 | Valid processing, duplicate idempotency, invalid signature rejection, missing signature rejection |
 | Ledger | 11 | Balanced/unbalanced entries, zero amounts, integer cents, idempotency, inactive accounts, balance queries, reversals, corrections |
 | Policies | 16 | Approved/non-approved broker guard, anniversary dates (including Feb 29), charge breakdown, tax/fee rule selection by date/jurisdiction, API creation, customer access control |
+| Payments | 23 | Checkout creation (state transitions, payment record, events, active-policy guard), success (activation, balanced ledger, charge total, commission, events), idempotency (duplicate success posts ledger once), failure (no activation, no ledger), simulated mode, ledger balances, commission rounding, Stripe webhook API (signature rejection, invalid JSON, full flow, duplicate idempotency), payment API (create checkout, list, simulate, access control) |
 
-**Total: 65 tests**
+**Total: 88 tests**
 
 ## Frontend
 

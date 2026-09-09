@@ -118,9 +118,15 @@ POST /api/brokers/<id>/kyb/   → initiate Persona KYB
 
 GET  /api/policies/           → list (Staff: all, Customer: own)
 POST /api/policies/           → create (Staff only, approved broker required)
+GET  /api/policies/jurisdictions/ → configured jurisdictions (from tax/fee rules)
 GET  /api/policies/<id>/      → detail with events
 
+POST /api/payments/checkout/              → create Stripe Checkout Session
+GET  /api/payments/policy/<id>/           → list payments for policy
+POST /api/payments/<id>/simulate/         → simulate payment (dev mode only)
+
 POST /api/integrations/webhooks/persona/  → Persona webhook (AllowAny, signature-verified)
+POST /api/integrations/webhooks/stripe/   → Stripe webhook (AllowAny, signature-verified)
 ```
 
 ## Frontend Routes
@@ -130,7 +136,10 @@ POST /api/integrations/webhooks/persona/  → Persona webhook (AllowAny, signatu
 | `/login` | All | Login form |
 | `/staff/brokers` | Staff | Broker list, create, KYB management |
 | `/staff/policies` | Staff | Policy list, create with charge breakdown |
-| `/customer/policies` | Customer | View own policies, payment-required state |
+| `/staff/payments` | Staff | Payment management, financial details per policy |
+| `/customer/policies` | Customer | View own policies, pay button, payment history |
+| `/customer/payment-success` | Customer | Stripe checkout success redirect |
+| `/customer/payment-cancel` | Customer | Stripe checkout cancel redirect |
 
 ## Key Design Decisions
 
@@ -142,4 +151,7 @@ POST /api/integrations/webhooks/persona/  → Persona webhook (AllowAny, signatu
 - **Persona adapter boundary**: `integrations/persona/` module with graceful degradation (SIMULATED prefix when no credentials)
 - **Webhook idempotency**: WebhookEvent with unique idempotency_key prevents duplicate processing
 - **Out-of-order tolerance**: KYB state never regresses from APPROVED/REJECTED regardless of webhook arrival order
-- **California tax model**: CA Premium Tax (2.35%), CA FAIR Plan Surcharge (0.10%), CA Stamping Fee ($25.00 flat) — effective-dated rules
+- **Texas surplus-lines tax model**: TX Surplus Lines Premium Tax (4.85%), SLTX Stamping Fee (0.04%) — both refundable, effective-dated rules
+- **Stripe Checkout flow**: DRAFT → create Checkout Session → PENDING_PAYMENT → webhook confirms → post ledger → ACTIVE
+- **Stripe adapter boundary**: `integrations/stripe/` module with SIMULATED mode when no credentials
+- **Commission on collected premium**: Broker commission posted at payment time, earned on premium only

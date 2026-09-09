@@ -4,7 +4,7 @@ A focused policy-administration system for Commercial General Liability insuranc
 
 ## Status
 
-Milestone 2 — auth, roles, Persona KYB, policy issuance, frontend screens.
+Milestone 3 — Stripe premium collection, payment flow, ledger posting, commission.
 
 ## Structure
 
@@ -118,7 +118,7 @@ Rules:
 
 ### Seeding demo data
 
-After running migrations, seed the chart of accounts, demo users, and California tax/fee rules:
+After running migrations, seed the chart of accounts, demo users, and Texas surplus-lines tax/fee rules:
 
 ```bash
 cd backend

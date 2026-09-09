@@ -92,6 +92,27 @@ export interface PolicyDetail extends Policy {
   }>;
 }
 
+export interface PaymentRecord {
+  id: number;
+  policy: number;
+  amount_cents: number;
+  status: string;
+  stripe_payment_intent_id: string;
+  stripe_checkout_session_id: string;
+  charges_snapshot: Record<string, unknown> | null;
+  effective_at: string;
+  recorded_at: string;
+  created_at: string;
+}
+
+export interface CheckoutResult {
+  payment_id: number;
+  checkout_url: string | null;
+  session_id: string;
+  simulated: boolean;
+  charges: Record<string, unknown>;
+}
+
 export const api = {
   login: (username: string, password: string) =>
     request<{ token: string; user: User }>("/api/auth/login/", {
@@ -123,6 +144,9 @@ export const api = {
   initiateKyb: (brokerId: number) =>
     request<{ inquiry_id: string }>(`/api/brokers/${brokerId}/kyb/`, { method: "POST" }),
 
+  listJurisdictions: () =>
+    request<string[]>("/api/policies/jurisdictions/"),
+
   listPolicies: () =>
     request<Policy[]>("/api/policies/"),
 
@@ -139,5 +163,19 @@ export const api = {
     request<{ policy: Policy; charges: Record<string, unknown> }>("/api/policies/", {
       method: "POST",
       body: JSON.stringify(data),
+    }),
+
+  createCheckout: (policyId: number) =>
+    request<CheckoutResult>("/api/payments/checkout/", {
+      method: "POST",
+      body: JSON.stringify({ policy_id: policyId }),
+    }),
+
+  listPolicyPayments: (policyId: number) =>
+    request<PaymentRecord[]>(`/api/payments/policy/${policyId}/`),
+
+  simulatePayment: (paymentId: number) =>
+    request<PaymentRecord>(`/api/payments/${paymentId}/simulate/`, {
+      method: "POST",
     }),
 };
