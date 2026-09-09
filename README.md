@@ -4,7 +4,7 @@ A focused policy-administration system for Commercial General Liability insuranc
 
 ## Status
 
-Milestone 5 — Claims, reserves, maker-checker and payout.
+Milestone 8 — Django Docker containerization.
 
 ## Structure
 
@@ -112,6 +112,26 @@ After running `uv sync`, point VS Code at the project's virtual environment so P
 1. `Ctrl+Shift+P` → **Python: Select Interpreter**
 2. Click **Enter interpreter path...**
 3. Select `backend/.venv/Scripts/python.exe` (Windows) or `backend/.venv/bin/python` (macOS/Linux)
+
+### Docker (optional)
+
+Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+
+```bash
+# Build and start Django + PostgreSQL
+docker compose up --build
+
+# Run migrations (one-time, separate from app start)
+docker compose run --rm migrate
+
+# Seed demo data inside the container
+docker compose exec backend python manage.py seed_demo
+
+# Health check
+curl http://localhost:8000/health/
+```
+
+The `migrate` service runs as a one-off task (uses `profiles: [migrate]`), not on every container start — matching the ECS deployment model.
 
 ### Running tests
 

@@ -5,6 +5,7 @@
 !.env.example
 __pycache__
 *.pyc
+*.pyo
 .pytest_cache
 .mypy_cache
 .ruff_cache
@@ -15,5 +16,7 @@ db.sqlite3
 Thumbs.db
 tmp
 temp
-tests
-docs
+*.log
+*.tmp
+.coverage
+htmlcov/

@@ -14,6 +14,7 @@ dependencies = [
     "stripe>=15.6.1",
     "reportlab>=5.0.1",
     "mcp[cli]>=1.0,<2.0",
+    "gunicorn>=23.0,<24.0",
 ]
 
 [dependency-groups]

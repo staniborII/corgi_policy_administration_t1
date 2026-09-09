@@ -79,6 +79,37 @@ npm run build        # Static export (verifies all pages)
 
 Not yet implemented. Playwright will be added for critical flows in later milestones.
 
+## Docker / Container Testing
+
+```bash
+# Build the image
+docker compose build backend
+
+# Start services (Django + PostgreSQL)
+docker compose up -d
+
+# Run migrations (one-off task)
+docker compose run --rm migrate
+
+# Verify health endpoint
+curl http://localhost:8000/health/
+# Expected: {"status": "ok"}
+
+# Verify SIGTERM graceful shutdown
+docker compose stop backend
+# Expected: clean exit, no error logs
+
+# Verify non-root runtime
+docker compose exec backend whoami
+# Expected: appuser
+
+# Verify no secrets in image
+docker compose exec backend env | grep -iE '(sk_live|AKIA|password)' || echo "No secrets"
+
+# Clean up
+docker compose down -v
+```
+
 ## Linting & Formatting
 
 ```bash

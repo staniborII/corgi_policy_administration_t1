@@ -55,6 +55,37 @@ flowchart TB
     INTEGRATIONS --> DB
 ```
 
+## Container Architecture
+
+```mermaid
+flowchart TB
+    subgraph Docker["Docker Compose / ECS"]
+        DJANGO[Django + Gunicorn<br/>Port 8000<br/>Non-root user]
+        MIGRATE[Migration Task<br/>one-off command]
+    end
+
+    PG[(PostgreSQL)]
+    NEXT[Next.js Static Frontend]
+    STRIPE[Stripe API]
+    PERSONA[Persona API]
+
+    NEXT -->|REST API| DJANGO
+    DJANGO --> PG
+    MIGRATE -->|python manage.py migrate| PG
+    STRIPE -->|webhooks| DJANGO
+    PERSONA -->|webhooks| DJANGO
+    DJANGO -->|API calls| STRIPE
+    DJANGO -->|API calls| PERSONA
+```
+
+**Image**: Multi-stage build, pinned `python:3.12.12-slim`, non-root runtime user, Gunicorn WSGI server.
+
+**Health check**: `GET /health/` returns `{"status": "ok"}` — suitable for ALB health checks.
+
+**Migrations**: Run as a separate one-off task, never on container startup.
+
+**Secrets**: All configuration via environment variables — nothing baked into the image.
+
 ## Dependency Direction
 
 ```

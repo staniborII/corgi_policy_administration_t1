@@ -263,6 +263,34 @@ Format:
 - **Alternatives considered:** Include SIMULATED in comparison (would require mock provider to return matching records), separate reconciliation mode for SIMULATED (over-engineering).
 - **Impact / follow-up:** Live-fire with real Stripe will compare real PI IDs against real provider records.
 
+## 2026-09-09 01:00 - M8: Multi-stage Docker build with uv
+- **Decision:** Use a multi-stage Dockerfile: build stage installs deps with `uv sync --frozen --no-dev`, runtime stage copies only the venv and app code. Base image is pinned `python:3.12.12-slim`.
+- **Reason:** Multi-stage reduces runtime image size (no build tools, no dev dependencies). Pinned base ensures reproducible builds. `uv` is faster than pip and respects the lockfile.
+- **Assumption / evidence:** `uv.lock` provides deterministic dependency resolution. `--frozen` ensures the lockfile is authoritative.
+- **Alternatives considered:** Single-stage with pip (larger image, slower), Alpine base (musl compatibility issues with some Python packages).
+- **Impact / follow-up:** Image is ready for ECR push in M9.
+
+## 2026-09-09 01:00 - M8: Gunicorn as production WSGI server
+- **Decision:** Use Gunicorn (v23) as the production WSGI server. Workers default to `2 * CPU + 1`. Graceful timeout matches ECS SIGTERM behavior (30s).
+- **Reason:** PRD mandates "never use Django runserver in the deployed image." Gunicorn is the standard Django production server, handles SIGTERM gracefully for ECS rolling deployments.
+- **Assumption / evidence:** Sync workers are sufficient for this workload (no long-polling/websockets). ASGI not required.
+- **Alternatives considered:** uWSGI (more complex config), Daphne/Uvicorn (ASGI not needed).
+- **Impact / follow-up:** Worker count tunable via `WEB_CONCURRENCY` env var.
+
+## 2026-09-09 01:00 - M8: Migrations as separate one-off task
+- **Decision:** Migrations are NOT run on container startup. A separate `migrate` service in docker-compose (with `profiles: [migrate]`) runs migrations as a controlled one-off. In ECS, this becomes a separate ECS task.
+- **Reason:** PRD requires: "Do not run database migrations automatically on every application container startup." Avoids race conditions with multiple containers and keeps the deployment model explicit.
+- **Assumption / evidence:** ECS deployment model: build → push ECR → controlled migration task → deploy/update service.
+- **Alternatives considered:** Entrypoint script with migration (violates PRD), init container (ECS Fargate doesn't support init containers natively).
+- **Impact / follow-up:** M9 CDK will define a separate ECS task definition for migrations.
+
+## 2026-09-09 01:00 - M8: Health endpoint at /health/
+- **Decision:** Simple `GET /health/` endpoint returning `{"status": "ok"}` with no authentication required. Does not disclose secrets, environment details, or database status.
+- **Reason:** PRD requires ALB-compatible health check. Minimal response avoids leaking operational details.
+- **Assumption / evidence:** ALB health checks need a simple 200 response. Database connectivity is implicitly verified by the Django middleware stack.
+- **Alternatives considered:** Include DB ping (adds latency, could cause health flapping), include version info (marginal value, potential info leak).
+- **Impact / follow-up:** M9 ALB target group will point health checks at this endpoint.
+
 ## 2026-09-08 18:00 - Milestone reorder: infra and containerization moved to end
 - **Decision:** Moved Django containerization from milestone 2 to milestone 8, and AWS infrastructure from milestone 3 to milestone 9. All feature milestones (2-7) are built and tested locally first.
 - **Reason:** Build all domain features locally before dealing with deployment complexity. Faster iteration during the core build.
