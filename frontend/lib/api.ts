@@ -151,6 +151,69 @@ export interface AsOfSnapshot {
   broker: string;
 }
 
+export interface ClaimRecord {
+  id: number;
+  policy: number;
+  claim_number: string;
+  status: string;
+  date_of_loss: string;
+  description: string;
+  estimated_amount_cents: number | null;
+  reported_at: string;
+  created_by: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClaimDetail {
+  claim: ClaimRecord;
+  financials: {
+    reserve_cents: number;
+    paid_cents: number;
+    incurred_cents: number;
+  };
+  payout_destination: PayoutDestinationRecord | null;
+}
+
+export interface ReserveEventRecord {
+  id: number;
+  claim: number;
+  amount_cents: number;
+  reserve_type: string;
+  effective_at: string;
+  recorded_at: string;
+  created_by: number | null;
+  memo: string;
+}
+
+export interface ClaimPaymentRecord {
+  id: number;
+  claim: number;
+  amount_cents: number;
+  status: string;
+  payee: string;
+  effective_at: string;
+  recorded_at: string;
+  created_by: number | null;
+  approved_by: number | null;
+  payout_reference: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PayoutDestinationRecord {
+  id: number;
+  claim: number;
+  payee_name: string;
+  account_last_four: string;
+  verification_status: string;
+  provider: string;
+  provider_reference: string;
+  verified_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export const api = {
   login: (username: string, password: string) =>
     request<{ token: string; user: User }>("/api/auth/login/", {
@@ -250,4 +313,69 @@ export const api = {
 
   getPolicyAsOf: (policyId: number, asOf?: string) =>
     request<AsOfSnapshot>(`/api/policies/${policyId}/as-of/${asOf ? `?as_of=${encodeURIComponent(asOf)}` : ""}`),
+
+  // Claims
+  listClaims: (policyId?: number) =>
+    request<ClaimRecord[]>(`/api/claims/${policyId ? `?policy_id=${policyId}` : ""}`),
+
+  getClaim: (id: number) =>
+    request<ClaimDetail>(`/api/claims/${id}/`),
+
+  submitClaim: (data: {
+    policy_id: number;
+    date_of_loss: string;
+    description: string;
+    estimated_amount_cents?: number;
+  }) =>
+    request<ClaimRecord>("/api/claims/", { method: "POST", body: JSON.stringify(data) }),
+
+  getClaimFinancials: (claimId: number) =>
+    request<{ reserve_cents: number; paid_cents: number; incurred_cents: number }>(
+      `/api/claims/${claimId}/financials/`
+    ),
+
+  listReserveEvents: (claimId: number) =>
+    request<ReserveEventRecord[]>(`/api/claims/${claimId}/reserves/`),
+
+  setReserve: (claimId: number, data: { amount_cents: number; reserve_type: string; memo?: string }) =>
+    request<ReserveEventRecord>(`/api/claims/${claimId}/reserves/`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  listClaimPayments: (claimId: number) =>
+    request<ClaimPaymentRecord[]>(`/api/claims/${claimId}/payments/`),
+
+  createClaimPayment: (claimId: number, data: { amount_cents: number; payee: string }) =>
+    request<ClaimPaymentRecord>(`/api/claims/${claimId}/payments/`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  approveClaimPayment: (paymentId: number) =>
+    request<ClaimPaymentRecord>(`/api/claims/payments/${paymentId}/approve/`, { method: "POST" }),
+
+  executeClaimPayout: (paymentId: number) =>
+    request<ClaimPaymentRecord>(`/api/claims/payments/${paymentId}/execute/`, { method: "POST" }),
+
+  simulatePayoutCallback: (data: { payout_reference: string; event_type: string; amount_cents?: number; reason?: string }) =>
+    request<ClaimPaymentRecord>("/api/claims/payout-callback/", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  getPayoutDestination: (claimId: number) =>
+    request<PayoutDestinationRecord>(`/api/claims/${claimId}/payout-destination/`),
+
+  setPayoutDestination: (claimId: number, data: { payee_name: string; account_last_four: string }) =>
+    request<PayoutDestinationRecord>(`/api/claims/${claimId}/payout-destination/`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  verifyPayoutDestination: (claimId: number, outcome: string) =>
+    request<PayoutDestinationRecord>(`/api/claims/${claimId}/payout-destination/verify/`, {
+      method: "POST",
+      body: JSON.stringify({ outcome }),
+    }),
 };

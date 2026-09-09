@@ -1,3 +1,5 @@
+import uuid
+
 from django.conf import settings
 from django.db import models
 
@@ -17,6 +19,7 @@ class Claim(models.Model):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.OPEN)
     date_of_loss = models.DateField()
     description = models.TextField()
+    estimated_amount_cents = models.PositiveIntegerField(null=True, blank=True)
     reported_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name="+"
@@ -70,8 +73,39 @@ class ClaimPayment(models.Model):
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name="+"
     )
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name="+"
+    )
+    payout_reference = models.CharField(max_length=100, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"ClaimPayment {self.id} — {self.amount_cents}¢ ({self.get_status_display()})"
+
+
+class PayoutDestination(models.Model):
+    class VerificationStatus(models.TextChoices):
+        PENDING = "PENDING"
+        VERIFIED = "VERIFIED"
+        FAILED = "FAILED"
+
+    claim = models.OneToOneField(Claim, on_delete=models.PROTECT, related_name="payout_destination")
+    payee_name = models.CharField(max_length=255)
+    account_last_four = models.CharField(max_length=4, help_text="Masked last 4 digits")
+    verification_status = models.CharField(
+        max_length=20, choices=VerificationStatus.choices, default=VerificationStatus.PENDING
+    )
+    provider = models.CharField(max_length=50, default="SIMULATED")
+    provider_reference = models.CharField(max_length=255, blank=True, default="")
+    verified_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"PayoutDest {self.payee_name} (****{self.account_last_four}) [{self.verification_status}]"
+
+    def save(self, *args, **kwargs):
+        if not self.provider_reference:
+            self.provider_reference = f"SIM-BANK-{uuid.uuid4().hex[:12].upper()}"
+        super().save(*args, **kwargs)

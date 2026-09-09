@@ -51,33 +51,48 @@ Corrections always apply the corrected endorsement immediately since the origina
 
 ```mermaid
 stateDiagram-v2
-    [*] --> OPEN
-    OPEN --> UNDER_REVIEW : investigation starts
-    UNDER_REVIEW --> RESERVED : reserve set
-    RESERVED --> PAYMENT_PENDING : payment initiated
-    PAYMENT_PENDING --> PARTIALLY_PAID : partial payment
-    PAYMENT_PENDING --> PAID : full payment
-    PARTIALLY_PAID --> PAID : remaining paid
+    [*] --> OPEN : customer submits claim
+    OPEN --> RESERVED : reserve set (set_reserve)
+    OPEN --> PAYMENT_PENDING : payment created (create_claim_payment)
+    RESERVED --> PAYMENT_PENDING : payment created
+    PAYMENT_PENDING --> PARTIALLY_PAID : partial payout settled
+    PAYMENT_PENDING --> PAID : full payout settled (reserve = 0)
+    PARTIALLY_PAID --> PAID : remaining reserve settled
     PAID --> CLOSED : finalized
     RESERVED --> CLOSED : denied/withdrawn
-    UNDER_REVIEW --> CLOSED : denied/withdrawn
 ```
+
+- Claims can be filed on ACTIVE, CANCELLED, or EXPIRED policies (date of loss must be within coverage dates)
+- Claims remain valid after later policy cancellation if incident occurred while active
 
 ## Claim Payment Status
 
 ```mermaid
 stateDiagram-v2
-    [*] --> DRAFT
-    DRAFT --> PENDING_APPROVAL : submitted
-    PENDING_APPROVAL --> APPROVED : approved (not by creator)
-    PENDING_APPROVAL --> DRAFT : rejected
-    APPROVED --> PENDING : payout initiated
-    PENDING --> SETTLED : payout confirmed
-    PENDING --> RETURNED : payout returned
-    PENDING --> FAILED : payout failed
+    [*] --> APPROVED : amount < $5,000 (auto-approved)
+    [*] --> PENDING_APPROVAL : amount >= $5,000
+    PENDING_APPROVAL --> APPROVED : second staff approves (maker ≠ checker)
+    APPROVED --> PENDING : execute_payout (bank verified)
+    PENDING --> SETTLED : payout callback (settled)
+    PENDING --> RETURNED : payout callback (returned)
+    PENDING --> FAILED : payout callback (failed)
+    SETTLED --> RETURNED : payout callback (returned after settle)
 ```
 
-The maker-checker rule applies: the person who creates a claim payment cannot approve it.
+**Maker-checker invariant**: `created_by != approved_by`. The person who creates a claim payment cannot approve it.
+
+**Payout prerequisites**: PayoutDestination must exist and have `verification_status = VERIFIED` before payout execution.
+
+## Payout Destination Status
+
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING : set_payout_destination
+    PENDING --> VERIFIED : bank verification succeeds (SIMULATED)
+    PENDING --> FAILED : bank verification fails (SIMULATED)
+```
+
+Bank verification is SIMULATED in v1, labelled with provider="SIMULATED" and SIM-BANK- reference prefix.
 
 ## Refund Status
 

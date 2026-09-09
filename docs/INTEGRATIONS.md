@@ -128,6 +128,77 @@ When `STRIPE_SECRET_KEY` is not configured:
 | `STRIPE_WEBHOOK_SECRET` | Webhook endpoint signing secret |
 | `FRONTEND_URL` | Base URL for Checkout success/cancel redirects (default: `http://localhost:3000`) |
 
+## Bank Verification Simulator (Claim Payouts)
+
+### Purpose
+
+Before a claim payout can execute, the claimant's payout destination must be verified. In v1, this is **SIMULATED** — no real bank account verification occurs.
+
+### Model
+
+`PayoutDestination` stores the verification state for a claim's payout account:
+- `verification_status`: PENDING → VERIFIED | FAILED
+- `provider`: Always "SIMULATED" in v1
+- `provider_reference`: Auto-generated `SIM-BANK-{uuid}` reference
+
+### Flow
+
+```mermaid
+sequenceDiagram
+    participant Staff
+    participant API
+    participant Simulator
+
+    Staff->>API: POST /claims/<id>/payout-destination/ {payee_name, account_last_four}
+    API->>API: Create PayoutDestination (PENDING, provider=SIMULATED)
+    API-->>Staff: destination details
+
+    Staff->>API: POST /claims/<id>/payout-destination/verify/ {outcome: VERIFIED}
+    API->>API: Update verification_status → VERIFIED
+    API-->>Staff: destination details
+```
+
+### Adapter Pattern
+
+The simulator is behind `apps/claims/simulators.py`. A future Plaid/Auth+Identity implementation replaces the simulator functions while the service layer remains unchanged.
+
+## Payout Simulator (Claim Payments)
+
+### Purpose
+
+Claim payout execution is **SIMULATED** in v1. The simulator generates a reference and the payout lifecycle is managed via callback endpoints.
+
+### Flow
+
+```mermaid
+sequenceDiagram
+    participant Staff
+    participant API
+    participant Simulator
+
+    Staff->>API: POST /claims/payments/<id>/execute/
+    API->>Simulator: simulate_payout(payment)
+    Simulator-->>API: SIM-PAY-{uuid}
+    API->>API: Payment → PENDING, store payout_reference
+
+    Staff->>API: POST /claims/payout-callback/ {payout_reference, event_type: SETTLED}
+    API->>API: Post ledger (DR 2300 / CR 1000)
+    API->>API: Payment → SETTLED
+```
+
+### Supported Events
+
+| Event | Action |
+|-------|--------|
+| SETTLED | Post ledger entries, mark payment SETTLED |
+| RETURNED | Post compensating ledger entries, mark payment RETURNED |
+
+### Idempotency
+
+- Duplicate SETTLED event on an already-SETTLED payment is a no-op (returns existing payment)
+- Duplicate RETURNED event on an already-RETURNED payment is a no-op
+- Ledger entries use idempotency keys: `payout-settled-{reference}`, `payout-returned-{reference}`
+
 ## Webhook Event Model
 
 All provider webhooks are logged in the `WebhookEvent` model:

@@ -28,11 +28,15 @@ export default function Nav() {
         <>
           <Link href="/staff/brokers">Brokers</Link>
           <Link href="/staff/policies">Policies</Link>
+          <Link href="/staff/claims">Claims</Link>
           <Link href="/staff/payments">Payments</Link>
         </>
       )}
       {user.role === "CUSTOMER" && (
-        <Link href="/customer/policies">My Policies</Link>
+        <>
+          <Link href="/customer/policies">My Policies</Link>
+          <Link href="/customer/claims">My Claims</Link>
+        </>
       )}
       <span style={{ marginLeft: "auto" }}>
         {user.first_name || user.username} ({user.role})

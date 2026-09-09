@@ -59,13 +59,82 @@ Original charge of $300 needs to be corrected to $350:
 
 All three entries remain permanently visible for audit.
 
-### Claim Reserve and Payment
+### Claim Reserve Setting
+
+When a reserve is set or increased:
+| Line | Account | Debit | Credit |
+|------|---------|-------|--------|
+| 1 | 5000 Claims Expense | amount | |
+| 2 | 2300 Claim Reserve | | amount |
+
+When a reserve is released (negative amount):
+| Line | Account | Debit | Credit |
+|------|---------|-------|--------|
+| 1 | 2300 Claim Reserve | amount | |
+| 2 | 5000 Claims Expense | | amount |
 
 ```mermaid
 flowchart LR
-    A[Reserve set] --> B[Claim Reserve +]
-    B --> C[Claims Expense +]
-    C --> D[Cash -]
+    A[Reserve set/increased] --> B["DR 5000 Claims Expense"]
+    B --> C["CR 2300 Claim Reserve"]
+```
+
+**Reserve identity**: Incurred = Paid + Remaining Reserve
+
+### Claim Payout Settled
+
+When a payout is confirmed as settled:
+| Line | Account | Debit | Credit |
+|------|---------|-------|--------|
+| 1 | 2300 Claim Reserve | amount | |
+| 2 | 1000 Cash | | amount |
+
+```mermaid
+flowchart LR
+    A[Payout settled] --> B["DR 2300 Claim Reserve"]
+    B --> C["CR 1000 Cash"]
+```
+
+### Claim Payout Returned (Compensating Entry)
+
+When a previously settled payout is returned:
+| Line | Account | Debit | Credit |
+|------|---------|-------|--------|
+| 1 | 1000 Cash | amount | |
+| 2 | 2300 Claim Reserve | | amount |
+
+```mermaid
+flowchart LR
+    A[Payout returned] --> B["DR 1000 Cash"]
+    B --> C["CR 2300 Claim Reserve"]
+```
+
+### Claim Financial Flow (Full Lifecycle)
+
+```mermaid
+sequenceDiagram
+    participant Staff
+    participant Claims
+    participant Ledger
+
+    Staff->>Claims: set_reserve(+$8,000)
+    Claims->>Ledger: DR 5000 $8,000 / CR 2300 $8,000
+    Note over Claims: Reserve = $8,000
+
+    Staff->>Claims: set_reserve(+$2,000 adjustment)
+    Claims->>Ledger: DR 5000 $2,000 / CR 2300 $2,000
+    Note over Claims: Reserve = $10,000
+
+    Staff->>Claims: create_claim_payment($4,000)
+    Note over Claims: PENDING_APPROVAL (>= $5K threshold)
+
+    Staff->>Claims: approve_claim_payment (second staff)
+    Staff->>Claims: execute_payout
+    Note over Claims: PENDING (payout in flight)
+
+    Claims->>Ledger: handle_payout_settled
+    Ledger-->>Ledger: DR 2300 $4,000 / CR 1000 $4,000
+    Note over Claims: Paid=$4K, Reserve=$10K, Incurred=$14K
 ```
 
 ### Broker Commission (posted at payment time)

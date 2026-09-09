@@ -19,6 +19,7 @@ erDiagram
 
     Claim ||--o{ ReserveEvent : "reserves"
     Claim ||--o{ ClaimPayment : "payouts"
+    Claim ||--o| PayoutDestination : "payout destination"
 
     LedgerAccount ||--o{ JournalLine : "lines"
     JournalEntry ||--o{ JournalLine : "lines"
@@ -62,8 +63,37 @@ Mid-term policy modification with pro-rata pricing.
 ### Payment / Refund
 Payment tracks Stripe payment intents. Refund tracks Stripe refunds linked to a payment.
 
-### Claim / ReserveEvent / ClaimPayment
-Claims with append-only reserve events and maker-checker claim payments.
+### Policy (M5 additions)
+- `coverage_limit_cents`: Per-occurrence limit in integer cents (default $1M)
+
+### Claim
+Customer-submitted insurance claim.
+- `claim_number`: Sequential CLM-XXXXXX
+- `status`: OPEN → UNDER_REVIEW → RESERVED → PAYMENT_PENDING → PARTIALLY_PAID → PAID → CLOSED
+- `date_of_loss`: Must be within policy coverage dates
+- `estimated_amount_cents`: Customer-provided estimate (optional)
+- Claims remain valid after policy cancellation if incident was during coverage
+
+### ReserveEvent
+Append-only reserve adjustments. Never mutated after creation.
+- `amount_cents`: Signed integer (positive = increase, negative = decrease)
+- `reserve_type`: INITIAL | ADJUSTMENT | RELEASE
+- Each event posts balanced journal entries (DR 5000 / CR 2300 or reversed)
+- **Identity**: Incurred = Paid + Remaining Reserve
+
+### ClaimPayment
+Claim payment with maker-checker approval workflow.
+- `status`: DRAFT → PENDING_APPROVAL → APPROVED → PENDING → SETTLED | RETURNED | FAILED
+- `approved_by`: Must differ from `created_by` (maker-checker invariant)
+- `payout_reference`: SIM-PAY-xxx reference from payout simulator
+- **Threshold**: >= $5,000 requires second staff approval
+
+### PayoutDestination
+Bank account verification for claim payouts.
+- `verification_status`: PENDING → VERIFIED | FAILED
+- `provider`: "SIMULATED" in v1, adapter for future Plaid replacement
+- `provider_reference`: SIM-BANK-xxx reference
+- Payout blocked unless verification_status = VERIFIED
 
 ### LedgerAccount / JournalEntry / JournalLine
 Double-entry append-only ledger. See [MONEY_FLOWS.md](MONEY_FLOWS.md).

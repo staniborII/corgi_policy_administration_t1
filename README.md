@@ -4,7 +4,7 @@ A focused policy-administration system for Commercial General Liability insuranc
 
 ## Status
 
-Milestone 4 — Endorsements, corrections, as-of reconstruction, PDF documents.
+Milestone 5 — Claims, reserves, maker-checker and payout.
 
 ## Structure
 

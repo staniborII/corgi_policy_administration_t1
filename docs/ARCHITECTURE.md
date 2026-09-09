@@ -137,6 +137,21 @@ POST /api/endorsements/<id>/correct/       → correct endorsement (Staff only)
 GET  /api/documents/policy/<id>/declarations/           → declarations PDF (?as_of=)
 GET  /api/documents/policy/<id>/endorsement-schedule/   → endorsement schedule PDF (?as_of=)
 
+GET  /api/claims/                                → list claims (?policy_id=)
+POST /api/claims/                                → submit claim
+GET  /api/claims/<id>/                           → claim detail + financials
+GET  /api/claims/<id>/financials/                → reserve, paid, incurred
+GET  /api/claims/<id>/reserves/                  → list reserve events
+POST /api/claims/<id>/reserves/                  → add reserve event (Staff only)
+GET  /api/claims/<id>/payments/                  → list claim payments (Staff only)
+POST /api/claims/<id>/payments/                  → create claim payment (Staff only)
+POST /api/claims/payments/<id>/approve/          → approve claim payment (Staff only, maker-checker)
+POST /api/claims/payments/<id>/execute/          → execute payout (Staff only)
+POST /api/claims/payout-callback/                → payout settled/returned callback (Staff only)
+GET  /api/claims/<id>/payout-destination/        → payout destination details (Staff only)
+POST /api/claims/<id>/payout-destination/        → set payout destination (Staff only)
+POST /api/claims/<id>/payout-destination/verify/ → simulate bank verification (Staff only)
+
 POST /api/integrations/webhooks/persona/  → Persona webhook (AllowAny, signature-verified)
 POST /api/integrations/webhooks/stripe/   → Stripe webhook (AllowAny, signature-verified)
 ```
@@ -153,7 +168,10 @@ POST /api/integrations/webhooks/stripe/   → Stripe webhook (AllowAny, signatur
 | `/customer/payment-success` | Customer | Stripe checkout success redirect |
 | `/customer/payment-cancel` | Customer | Stripe checkout cancel redirect |
 | `/staff/policies/detail?id=X` | Staff | Policy detail, endorsements, corrections, as-of, PDFs |
+| `/staff/claims` | Staff | Claims list, manage all claims |
+| `/staff/claims/detail?id=X` | Staff | Claim detail, reserves, payments, payout destination, maker-checker |
 | `/customer/policies/detail?id=X` | Customer | Policy detail, endorsement approval, as-of, PDFs |
+| `/customer/claims` | Customer | View own claims, submit new claim |
 
 ## Key Design Decisions
 
@@ -174,3 +192,8 @@ POST /api/integrations/webhooks/stripe/   → Stripe webhook (AllowAny, signatur
 - **Correction = reversal + re-book**: Original entries reversed, corrected endorsement created, no mutation of posted entries
 - **As-of reconstruction**: Reconstructs policy state at any historical point from base premium + applied endorsements filtered by recorded_at
 - **PDF generation**: reportlab for declarations pages and endorsement schedules, supports as-of parameter
+- **Append-only reserves**: Reserve events are never mutated; balance = sum of all events. Incurred = Paid + Remaining Reserve
+- **Maker-checker**: Claim payments >= $5,000 require second staff approval (created_by != approved_by)
+- **Bank verification simulator**: SIMULATED provider behind adapter boundary, states PENDING → VERIFIED/FAILED
+- **Payout simulator**: SIMULATED payout with SIM-PAY- references, supports settled/returned/failed callbacks
+- **Policy coverage limit**: Per-occurrence limit checked before creating claim payments (default $1M)

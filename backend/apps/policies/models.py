@@ -17,6 +17,7 @@ class Policy(models.Model):
     effective_date = models.DateField()
     expiration_date = models.DateField()
     premium_amount_cents = models.PositiveIntegerField()
+    coverage_limit_cents = models.PositiveIntegerField(default=100_000_000, help_text="Per-occurrence limit in cents")
     coverage_territory = models.CharField(max_length=2, help_text="US state code")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
