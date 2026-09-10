@@ -12,6 +12,7 @@ from apps.ledger.services import post_journal_entry
 from apps.payments.models import Payment, Refund
 from apps.policies.models import Policy, PolicyEvent
 from apps.policies.services import calculate_rate_amount, compute_policy_charges
+from apps.ws.notifications import notify_policy_change
 
 logger = logging.getLogger(__name__)
 
@@ -38,9 +39,8 @@ def create_checkout_for_policy(*, policy_id, requested_by):
         )
 
     if policy.status == Policy.Status.PENDING_PAYMENT:
-        existing = Payment.objects.filter(policy=policy, status=Payment.Status.PENDING).first()
-        if existing and existing.stripe_checkout_session_id:
-            raise PaymentError("A payment is already pending for this policy")
+        stale = Payment.objects.filter(policy=policy, status=Payment.Status.PENDING)
+        stale.update(status=Payment.Status.FAILED)
 
     charges = compute_policy_charges(
         premium_cents=policy.premium_amount_cents,
@@ -100,6 +100,8 @@ def create_checkout_for_policy(*, policy_id, requested_by):
         total_cents,
         checkout["session_id"],
     )
+
+    transaction.on_commit(lambda: notify_policy_change(policy, "payment.checkout_created"))
 
     return {
         "payment_id": payment.id,
@@ -213,6 +215,8 @@ def handle_payment_success(*, payment_id, stripe_payment_intent_id=""):
         stripe_payment_intent_id,
     )
 
+    transaction.on_commit(lambda: notify_policy_change(policy, "payment.succeeded"))
+
     return payment
 
 
@@ -226,6 +230,42 @@ def handle_payment_failure(*, payment_id, reason=""):
 
     payment.status = Payment.Status.FAILED
     payment.save(update_fields=["status", "updated_at"])
+
+    policy = payment.policy
+    transaction.on_commit(lambda: notify_policy_change(policy, "payment.failed"))
+
+    return payment
+
+
+def verify_checkout_session(*, session_id):
+    """
+    Check a Stripe Checkout Session's status and process payment if completed.
+    Used as a webhook fallback when the customer returns from Stripe.
+    """
+    if not settings.STRIPE_SECRET_KEY:
+        return None
+
+    from apps.integrations.stripe.client import retrieve_checkout_session
+
+    try:
+        payment = Payment.objects.get(stripe_checkout_session_id=session_id)
+    except Payment.DoesNotExist:
+        raise PaymentError(f"No payment found for session {session_id}")
+
+    if payment.status == Payment.Status.SUCCEEDED:
+        return payment
+
+    if payment.status != Payment.Status.PENDING:
+        raise PaymentError(f"Payment is in {payment.status} state and cannot be verified")
+
+    session = retrieve_checkout_session(session_id)
+
+    if session.payment_status == "paid":
+        payment_intent_id = session.payment_intent or ""
+        return handle_payment_success(
+            payment_id=payment.id,
+            stripe_payment_intent_id=payment_intent_id,
+        )
 
     return payment
 
@@ -307,6 +347,8 @@ def handle_refund_success(*, refund_id):
         )
 
     logger.info(f"Refund success handled: refund_id={refund_id}, provider_reference={refund.stripe_refund_id}")
+
+    transaction.on_commit(lambda: notify_policy_change(policy, "refund.succeeded"))
 
     commission_clawback = charges.get("commission_clawback_cents", 0)
     if commission_clawback > 0:

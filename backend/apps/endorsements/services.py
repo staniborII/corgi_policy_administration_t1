@@ -10,6 +10,7 @@ from apps.ledger.models import JournalLine
 from apps.ledger.services import post_journal_entry, reverse_journal_entry
 from apps.policies.models import Policy, PolicyEvent
 from apps.policies.services import calculate_rate_amount, compute_policy_charges
+from apps.ws.notifications import notify_policy_change
 
 
 class EndorsementError(Exception):
@@ -146,6 +147,8 @@ def create_endorsement(
         },
     )
 
+    transaction.on_commit(lambda: notify_policy_change(policy, "endorsement.created"))
+
     return endorsement, charges
 
 
@@ -165,6 +168,10 @@ def approve_endorsement(*, endorsement_id: int, approved_by):
         endorsement.status = Endorsement.Status.APPROVED
 
     endorsement.save(update_fields=["status", "updated_at"])
+
+    policy = endorsement.policy
+    transaction.on_commit(lambda: notify_policy_change(policy, "endorsement.approved"))
+
     return endorsement
 
 
@@ -276,6 +283,8 @@ def apply_endorsement(*, endorsement_id: int, stripe_payment_intent_id: str = ""
     endorsement.status = Endorsement.Status.APPLIED
     endorsement.save(update_fields=["status", "updated_at"])
 
+    transaction.on_commit(lambda: notify_policy_change(policy, "endorsement.applied"))
+
     return endorsement
 
 
@@ -338,5 +347,7 @@ def correct_endorsement(*, endorsement_id: int, corrected_effective_date: date, 
     if corrected.status in (Endorsement.Status.APPROVED, Endorsement.Status.PENDING_PAYMENT):
         apply_endorsement(endorsement_id=corrected.id)
         corrected.refresh_from_db()
+
+    transaction.on_commit(lambda: notify_policy_change(policy, "endorsement.corrected"))
 
     return corrected

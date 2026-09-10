@@ -2,12 +2,16 @@ import * as cdk from 'aws-cdk-lib/core';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import { Construct } from 'constructs';
 
+export interface NetworkStackProps extends cdk.StackProps {
+  allowedIps?: string[];
+}
+
 export class NetworkStack extends cdk.Stack {
   public readonly vpc: ec2.Vpc;
   public readonly albSg: ec2.SecurityGroup;
   public readonly ecsSg: ec2.SecurityGroup;
 
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  constructor(scope: Construct, id: string, props?: NetworkStackProps) {
     super(scope, id, props);
 
     this.vpc = new ec2.Vpc(this, 'CorgiVpc', {
@@ -54,6 +58,10 @@ export class NetworkStack extends cdk.Stack {
       service: ec2.InterfaceVpcEndpointAwsService.SECRETS_MANAGER,
     });
 
+    this.vpc.addInterfaceEndpoint('SsmEndpoint', {
+      service: ec2.InterfaceVpcEndpointAwsService.SSM,
+    });
+
     // Both SGs live here to break circular deps between ECS and Database stacks.
     // The ALB SG is passed to EcsStack so the ApplicationLoadBalancedFargateService
     // pattern can use a pre-created ALB without generating cross-stack SG references.
@@ -62,6 +70,12 @@ export class NetworkStack extends cdk.Stack {
       description: 'Internal ALB - accepts from CloudFront',
       allowAllOutbound: true,
     });
+
+    const cidrs = props?.allowedIps?.length ? props.allowedIps : ['0.0.0.0/0'];
+    for (const cidr of cidrs) {
+      this.albSg.addIngressRule(ec2.Peer.ipv4(cidr), ec2.Port.tcp(80), `HTTP from ${cidr}`);
+      this.albSg.addIngressRule(ec2.Peer.ipv4(cidr), ec2.Port.tcp(443), `HTTPS from ${cidr}`);
+    }
 
     this.ecsSg = new ec2.SecurityGroup(this, 'EcsSg', {
       vpc: this.vpc,

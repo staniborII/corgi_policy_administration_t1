@@ -6,6 +6,7 @@ from django.utils.crypto import get_random_string
 from apps.accounts.models import User
 from apps.brokers.models import Broker, KYBVerification
 from apps.integrations.persona.client import create_persona_inquiry
+from apps.ws.notifications import notify_broker_change
 
 logger = logging.getLogger(__name__)
 
@@ -105,5 +106,7 @@ def process_kyb_webhook(*, broker_id, inquiry_id, persona_status):
         broker.save(update_fields=["status", "updated_at"])
 
     logger.info(f"KYB status updated: broker_id={broker_id}, old_status={old_status} -> new_status={broker.status}")
+
+    transaction.on_commit(lambda: notify_broker_change(broker, "broker.kyb_updated"))
 
     return broker

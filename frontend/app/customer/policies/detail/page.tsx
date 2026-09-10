@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { useRealtimeRefresh } from "@/lib/useRealtimeRefresh";
 import {
   api,
   type Policy,
@@ -14,7 +15,7 @@ import {
 import Nav from "@/components/Nav";
 import { formatCents } from "@/lib/format";
 import { StatusBadge } from "@/components/status-badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -67,6 +68,8 @@ function CustomerPolicyDetailContent() {
     }
     loadData();
   }, [user, loading, router, policyId]);
+
+  useRealtimeRefresh(["policy.", "endorsement.", "payment."], loadData);
 
   async function loadData() {
     if (!policyId) return;
@@ -131,9 +134,35 @@ function CustomerPolicyDetailContent() {
     }
   }
 
-  function pdfUrl(type: "declarations" | "endorsement-schedule", asOf?: string) {
-    const base = `${API_BASE}/api/documents/policy/${policyId}/${type}/`;
+  function pdfPath(type: "declarations" | "endorsement-schedule", asOf?: string) {
+    const base = `/api/documents/policy/${policyId}/${type}/`;
     return asOf ? `${base}?as_of=${encodeURIComponent(new Date(asOf).toISOString())}` : base;
+  }
+
+  async function downloadPdf(type: "declarations" | "endorsement-schedule", asOf?: string) {
+    try {
+      const { getToken } = await import("@/lib/api");
+      const t = getToken();
+      const headers: Record<string, string> = {};
+      if (t) headers["Authorization"] = `Token ${t}`;
+      const res = await fetch(`${API_BASE}${pdfPath(type, asOf)}`, { headers });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.detail || "Failed to download document.");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = res.headers.get("Content-Disposition")?.split("filename=")[1]?.replace(/"/g, "") || `${type}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError("Failed to download document.");
+    }
   }
 
   if (loading || !user) return null;
@@ -289,18 +318,12 @@ function CustomerPolicyDetailContent() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
-              <a
-                href={pdfUrl("declarations")}
-                className={buttonVariants({ variant: "default", size: "sm" })}
-              >
+              <Button size="sm" onClick={() => downloadPdf("declarations")}>
                 Download Declarations
-              </a>
-              <a
-                href={pdfUrl("endorsement-schedule")}
-                className={buttonVariants({ variant: "default", size: "sm" })}
-              >
+              </Button>
+              <Button size="sm" onClick={() => downloadPdf("endorsement-schedule")}>
                 Download Endorsement Schedule
-              </a>
+              </Button>
             </div>
           </CardContent>
         </Card>

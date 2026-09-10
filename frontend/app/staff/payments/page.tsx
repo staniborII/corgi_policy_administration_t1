@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { useRealtimeRefresh } from "@/lib/useRealtimeRefresh";
 import { api, type Policy, type PaymentRecord } from "@/lib/api";
 import Nav from "@/components/Nav";
 import { formatCents } from "@/lib/format";
@@ -36,6 +37,10 @@ export default function StaffPaymentsPage() {
     }
   }, [user, loading, router]);
 
+  const refreshPolicies = useCallback(() => {
+    api.listPolicies().then(setPolicies).catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (loading || !user) return;
     let cancelled = false;
@@ -46,6 +51,8 @@ export default function StaffPaymentsPage() {
       .finally(() => { if (!cancelled) setLoadingData(false); });
     return () => { cancelled = true; };
   }, [loading, user]);
+
+  useRealtimeRefresh("payment.", refreshPolicies);
 
   async function togglePayments(policyId: number) {
     if (expandedPolicy === policyId) {

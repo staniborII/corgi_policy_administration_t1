@@ -27,8 +27,12 @@ ENV PATH="/app/.venv/bin:$PATH" \
 
 RUN python manage.py collectstatic --noinput 2>/dev/null || true
 
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 USER appuser
 
 EXPOSE 8000
 
-CMD ["gunicorn", "config.wsgi:application", "--config", "gunicorn.conf.py"]
+ENTRYPOINT ["/app/entrypoint.sh"]
+CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "config.asgi:application"]

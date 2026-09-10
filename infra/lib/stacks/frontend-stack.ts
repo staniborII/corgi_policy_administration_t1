@@ -1,9 +1,9 @@
 import * as cdk from 'aws-cdk-lib/core';
 import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
-import * as wafv2 from 'aws-cdk-lib/aws-wafv2';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as targets from 'aws-cdk-lib/aws-route53-targets';
@@ -11,6 +11,7 @@ import { Construct } from 'constructs';
 
 export interface FrontendStackProps extends cdk.StackProps {
   alb: elbv2.ApplicationLoadBalancer;
+  wafAclArn: string;
 
   webDomainName?: string;
   hostedZoneId?: string;
@@ -39,63 +40,6 @@ export class FrontendStack extends cdk.Stack {
       versioned: true,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
-    });
-
-    // Private S3 bucket for policy documents
-    const docsBucket = new s3.Bucket(this, 'DocumentsBucket', {
-      bucketName: `corgi-documents-${this.account}-${this.region}`,
-      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
-      encryption: s3.BucketEncryption.S3_MANAGED,
-      versioned: true,
-      removalPolicy: cdk.RemovalPolicy.RETAIN,
-    });
-
-    // WAF Web ACL for CloudFront
-    const waf = new wafv2.CfnWebACL(this, 'CorgiWaf', {
-      defaultAction: { allow: {} },
-      scope: 'CLOUDFRONT',
-      visibilityConfig: {
-        cloudWatchMetricsEnabled: true,
-        metricName: 'CorgiWaf',
-        sampledRequestsEnabled: true,
-      },
-      rules: [
-        {
-          name: 'AWSManagedRulesCommonRuleSet',
-          priority: 1,
-          overrideAction: { none: {} },
-          statement: {
-            managedRuleGroupStatement: {
-              vendorName: 'AWS',
-              name: 'AWSManagedRulesCommonRuleSet',
-              excludedRules: [
-                { name: 'SizeRestrictions_BODY' },
-              ],
-            },
-          },
-          visibilityConfig: {
-            cloudWatchMetricsEnabled: true,
-            metricName: 'CommonRules',
-            sampledRequestsEnabled: true,
-          },
-        },
-        {
-          name: 'RateLimit',
-          priority: 2,
-          action: { block: {} },
-          statement: {
-            rateBasedStatement: {
-              limit: 2000,
-              aggregateKeyType: 'IP',
-            },
-          },
-          visibilityConfig: {
-            cloudWatchMetricsEnabled: true,
-            metricName: 'RateLimit',
-            sampledRequestsEnabled: true,
-          },
-        },
-      ],
     });
 
     // CloudFront OAC for S3
@@ -152,6 +96,20 @@ export class FrontendStack extends cdk.Stack {
           originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER,
           allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
         },
+        '/ws/*': {
+          origin: albOrigin,
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+          originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+        },
+        '/static/*': {
+          origin: albOrigin,
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+          originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
+        },
       },
       defaultRootObject: 'index.html',
       errorResponses: [
@@ -168,7 +126,7 @@ export class FrontendStack extends cdk.Stack {
           ttl: cdk.Duration.seconds(0),
         },
       ],
-      webAclId: waf.attrArn,
+      webAclId: props.wafAclArn,
       ...(hasWebDomain ? {
         domainNames: [props.webDomainName!],
         certificate,
@@ -188,16 +146,19 @@ export class FrontendStack extends cdk.Stack {
       });
     }
 
-    new cdk.CfnOutput(this, 'CloudFrontUrl', {
-      value: hasWebDomain
-        ? `https://${props.webDomainName}`
-        : `https://${this.distribution.distributionDomainName}`,
+    const frontendUrl = hasWebDomain
+      ? `https://${props.webDomainName}`
+      : `https://${this.distribution.distributionDomainName}`;
+
+    new ssm.StringParameter(this, 'FrontendUrlParam', {
+      parameterName: '/corgi/frontend-url',
+      stringValue: frontendUrl,
+      description: 'Resolved frontend URL (custom domain or CloudFront distribution)',
     });
+
+    new cdk.CfnOutput(this, 'CloudFrontUrl', { value: frontendUrl });
     new cdk.CfnOutput(this, 'FrontendBucketName', {
       value: this.frontendBucket.bucketName,
-    });
-    new cdk.CfnOutput(this, 'DocumentsBucketName', {
-      value: docsBucket.bucketName,
     });
     new cdk.CfnOutput(this, 'DistributionId', {
       value: this.distribution.distributionId,

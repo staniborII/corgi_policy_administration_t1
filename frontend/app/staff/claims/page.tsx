@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { useRealtimeRefresh } from "@/lib/useRealtimeRefresh";
 import { api, type ClaimRecord } from "@/lib/api";
 import Nav from "@/components/Nav";
 import { formatCents } from "@/lib/format";
@@ -32,6 +33,10 @@ export default function StaffClaimsPage() {
     }
   }, [user, loading, router]);
 
+  const refreshClaims = useCallback(() => {
+    api.listClaims().then(setClaims).catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (loading || !user) return;
     let cancelled = false;
@@ -42,6 +47,8 @@ export default function StaffClaimsPage() {
       .finally(() => { if (!cancelled) setLoadingData(false); });
     return () => { cancelled = true; };
   }, [loading, user]);
+
+  useRealtimeRefresh("claim.", refreshClaims);
 
   if (loading || !user) return null;
 

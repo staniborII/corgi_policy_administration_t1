@@ -38,6 +38,7 @@ class PolicyEvent(models.Model):
         CANCELLED = "CANCELLED"
         EXPIRED = "EXPIRED"
         RENEWED = "RENEWED"
+        EFFECTIVE_DATE_UPDATED = "EFFECTIVE_DATE_UPDATED"
 
     policy = models.ForeignKey(Policy, on_delete=models.PROTECT, related_name="events")
     event_type = models.CharField(max_length=30, choices=EventType.choices)

@@ -1,11 +1,11 @@
 environments:
   staging:
-    project: corgi
-    owner: corgi-insurance
+    project: corgi-demo
+    owner: corgoi-demo-app
 
-    # AWS account and region
-    account: ""
-    region: us-east-1
+    # Account and region come from env vars:
+    #   CDK_DEFAULT_ACCOUNT / AWS_ACCOUNT_ID
+    #   CDK_DEFAULT_REGION  / AWS_REGION  (defaults to us-east-1)
 
     # DNS (optional - leave empty to use default CloudFront/ALB URLs)
     # When hostedZoneId, hostedZoneName, and certificateArn are all provided,
@@ -34,9 +34,6 @@ environments:
   production:
     project: corgi
     owner: corgi-insurance
-
-    account: ""
-    region: us-east-1
 
     webDomainName: ""
     serverDomainName: ""

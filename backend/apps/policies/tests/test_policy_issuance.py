@@ -1,12 +1,13 @@
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.accounts.models import User
 from apps.brokers.models import Broker, KYBVerification
-from apps.policies.models import FeeRule, Policy, TaxRule
-from apps.policies.services import PolicyError, compute_policy_charges, issue_policy
+from apps.policies.models import FeeRule, Policy, PolicyEvent, TaxRule
+from apps.policies.services import PolicyError, compute_policy_charges, issue_policy, update_policy_effective_date
 
 
 @pytest.fixture
@@ -214,3 +215,106 @@ class TestPolicyAPI:
         resp = api.get("/api/policies/")
         assert resp.status_code == 200
         assert len(resp.data) >= 1
+
+
+class TestUpdateEffectiveDate:
+    @pytest.fixture
+    def draft_policy(self, approved_broker, customer_user, tx_rules, staff_user):
+        policy, _ = issue_policy(
+            customer=customer_user,
+            broker_id=approved_broker.id,
+            effective_date=date.today() - timedelta(days=3),
+            premium_amount_cents=100000,
+            coverage_territory="TX",
+            created_by=staff_user,
+        )
+        return policy
+
+    def test_update_effective_date_on_draft(self, draft_policy, staff_user):
+        new_date = date.today() + timedelta(days=7)
+        updated = update_policy_effective_date(
+            policy_id=draft_policy.id,
+            new_effective_date=new_date,
+            updated_by=staff_user,
+        )
+        assert updated.effective_date == new_date
+        assert updated.expiration_date == new_date.replace(year=new_date.year + 1)
+
+    def test_records_event(self, draft_policy, staff_user):
+        old_date = draft_policy.effective_date
+        new_date = date.today() + timedelta(days=7)
+        update_policy_effective_date(
+            policy_id=draft_policy.id,
+            new_effective_date=new_date,
+            updated_by=staff_user,
+        )
+        event = PolicyEvent.objects.filter(
+            policy=draft_policy,
+            event_type=PolicyEvent.EventType.EFFECTIVE_DATE_UPDATED,
+        ).first()
+        assert event is not None
+        assert event.data["old_effective_date"] == str(old_date)
+        assert event.data["new_effective_date"] == str(new_date)
+
+    def test_rejects_past_date(self, draft_policy, staff_user):
+        with pytest.raises(PolicyError, match="today or in the future"):
+            update_policy_effective_date(
+                policy_id=draft_policy.id,
+                new_effective_date=date.today() - timedelta(days=1),
+                updated_by=staff_user,
+            )
+
+    def test_rejects_active_policy(self, draft_policy, staff_user):
+        draft_policy.status = Policy.Status.ACTIVE
+        draft_policy.save()
+        with pytest.raises(PolicyError, match="unpaid policy"):
+            update_policy_effective_date(
+                policy_id=draft_policy.id,
+                new_effective_date=date.today() + timedelta(days=1),
+                updated_by=staff_user,
+            )
+
+    def test_update_via_api(self, api, draft_policy, staff_user):
+        api.force_authenticate(user=staff_user)
+        new_date = date.today() + timedelta(days=7)
+        resp = api.post(
+            f"/api/policies/{draft_policy.id}/update-effective-date/",
+            {"effective_date": new_date.isoformat()},
+            format="json",
+        )
+        assert resp.status_code == 200
+        assert resp.data["effective_date"] == new_date.isoformat()
+
+    def test_customer_cannot_update(self, api, draft_policy, customer_user):
+        api.force_authenticate(user=customer_user)
+        resp = api.post(
+            f"/api/policies/{draft_policy.id}/update-effective-date/",
+            {"effective_date": (date.today() + timedelta(days=1)).isoformat()},
+            format="json",
+        )
+        assert resp.status_code == 403
+
+    def test_pending_payment_resets_to_draft_and_expires_payment(self, draft_policy, staff_user):
+        from apps.payments.models import Payment
+
+        draft_policy.status = Policy.Status.PENDING_PAYMENT
+        draft_policy.save()
+        payment = Payment.objects.create(
+            policy=draft_policy,
+            amount_cents=104890,
+            status=Payment.Status.PENDING,
+            stripe_checkout_session_id="SIMULATED-cs-stale",
+            idempotency_key=f"policy-initial-{draft_policy.id}-stale",
+            effective_at=timezone.now(),
+        )
+
+        new_date = date.today() + timedelta(days=7)
+        updated = update_policy_effective_date(
+            policy_id=draft_policy.id,
+            new_effective_date=new_date,
+            updated_by=staff_user,
+        )
+        assert updated.status == Policy.Status.DRAFT
+
+        payment.refresh_from_db()
+        assert payment.status == Payment.Status.FAILED

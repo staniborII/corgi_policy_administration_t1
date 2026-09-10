@@ -60,8 +60,9 @@ flowchart TB
 ```mermaid
 flowchart TB
     subgraph Docker["Docker Compose / ECS"]
-        DJANGO[Django + Gunicorn<br/>Port 8000<br/>Non-root user]
+        DJANGO[Django + Daphne ASGI<br/>Port 8000<br/>Non-root user]
         MIGRATE[Migration Task<br/>one-off command]
+        REDIS[(Redis)]
     end
 
     PG[(PostgreSQL)]
@@ -70,7 +71,9 @@ flowchart TB
     PERSONA[Persona API]
 
     NEXT -->|REST API| DJANGO
+    NEXT -->|WebSocket| DJANGO
     DJANGO --> PG
+    DJANGO --> REDIS
     MIGRATE -->|python manage.py migrate| PG
     STRIPE -->|webhooks| DJANGO
     PERSONA -->|webhooks| DJANGO
@@ -78,7 +81,7 @@ flowchart TB
     DJANGO -->|API calls| PERSONA
 ```
 
-**Image**: Multi-stage build, pinned `python:3.12.12-slim`, non-root runtime user, Gunicorn WSGI server.
+**Image**: Multi-stage build, pinned `python:3.12.12-slim`, non-root runtime user, Daphne ASGI server (HTTP + WebSocket).
 
 **Health check**: `GET /health/` returns `{"status": "ok"}` — suitable for ALB health checks.
 
@@ -90,8 +93,10 @@ flowchart TB
 
 ```
 Next.js → Django REST API → Domain Services → Django ORM / PostgreSQL
-                                    ↓
-                          Integration Adapters → Stripe / Persona
+  ↕ WS                            ↓
+         Daphne ASGI      Integration Adapters → Stripe / Persona
+              ↓
+    Redis Channel Layer → WebSocket Notifications
 ```
 
 Business logic lives in service functions within each Django app (e.g., `ledger/services.py`, `policies/services.py`). Views are thin — they validate input via DRF serializers, call services, and return responses.
@@ -112,6 +117,7 @@ backend/
 │   ├── claims/       # Claim, ReserveEvent, ClaimPayment
 │   ├── approvals/    # Maker-checker approval workflow
 │   ├── reconciliation/ # ReconciliationRun, breaks, BrokerStatement
+│   ├── ws/           # WebSocket consumer, middleware, notifications
 │   ├── mcp/          # MCP server (FastMCP) — 3 read tools + 1 write tool
 │   ├── documents/    # Document metadata and generation
 │   └── integrations/ # WebhookEvent, provider adapters (Stripe, Persona)
@@ -242,7 +248,8 @@ flowchart TB
             ALB[Public ALB<br/>HTTP or HTTPS]
         end
         subgraph Private["Private App Subnets"]
-            ECS[ECS Fargate<br/>Gunicorn + Django]
+            ECS[ECS Fargate<br/>Daphne + Django]
+            ELASTICACHE[(ElastiCache Redis)]
         end
         subgraph Isolated["Isolated DB Subnets"]
             PROXY[RDS Proxy]
@@ -269,6 +276,7 @@ flowchart TB
     ALB --> ECS
     ECS --> PROXY
     PROXY --> RDS
+    ECS --> ELASTICACHE
     ECS --> SM_DB
     ECS --> SM_APP
 ```
@@ -279,6 +287,7 @@ flowchart TB
 |-------|-----------|---------|
 | `CorgiNetwork` | VPC, subnets, NAT, VPC endpoints, ALB/ECS SGs | Network foundation |
 | `CorgiDatabase` | RDS PostgreSQL, RDS Proxy, DB SGs, DB secret (auto-gen password) | Data tier |
+| `CorgiCache` | ElastiCache Redis (cache.t4g.micro, single node, private subnets) | Channel layer for WebSocket |
 | `CorgiEcs` | ECS Fargate, public ALB, ECR, app secrets, optional Route 53 + HTTPS | Compute tier |
 | `CorgiFrontend` | S3 buckets, CloudFront, WAF, OAC, optional Route 53 + custom domain | CDN and static hosting |
 
@@ -307,6 +316,8 @@ environments:
 
 Deploy with: `npx cdk deploy --all -c stage=staging`
 
+**Stack deploy order:** Network → Database → Cache → ECS → Frontend
+
 **DNS behavior:**
 - All DNS fields empty → default CloudFront URL (`d1234.cloudfront.net`) and ALB URL (`corgi-alb-123.elb.amazonaws.com`)
 - `certificateArn` + `hostedZoneId` + `hostedZoneName` + domain names → HTTPS on ALB, custom domain on CloudFront, Route 53 alias records
@@ -324,9 +335,61 @@ All secrets are injected into the ECS container as environment variables via `ec
 
 ```
 Internet → ALB SG (port 80/443) → ECS SG (port 8000) → RDS Proxy SG (port 5432) → RDS SG (port 5432)
+                                   ECS SG → ElastiCache SG (port 6379)
 ```
 
 No direct ECS-to-RDS access; all database traffic goes through RDS Proxy with TLS.
+
+## Real-Time Communication (WebSocket)
+
+### Architecture
+
+```mermaid
+sequenceDiagram
+    participant FE as Next.js Frontend
+    participant WS as Daphne (WebSocket)
+    participant SVC as Django Services
+    participant Redis as Redis Channel Layer
+
+    FE->>WS: ws://host/ws/events/?token=<auth_token>
+    WS->>WS: TokenAuthMiddleware (DRF Token lookup)
+    WS->>Redis: Join groups: user_{id}, role_{role}
+    WS-->>FE: Connection accepted
+
+    Note over SVC: Service function completes (e.g. issue_policy)
+    SVC->>Redis: transaction.on_commit → group_send(user_{id}, event)
+    SVC->>Redis: transaction.on_commit → group_send(role_STAFF, event)
+    Redis->>WS: Forward to EventConsumer
+    WS-->>FE: JSON {event, resource_id, ...}
+    FE->>FE: useRealtimeRefresh → debounce → loadData()
+```
+
+### Design Principles
+
+- **Notify-then-refetch**: WebSocket sends lightweight event (type + resource ID). Frontend calls existing `loadData()` — no complex state sync.
+- **Best-effort delivery**: Notifications wrapped in try/except. Redis failures don't break service functions.
+- **Transaction safety**: `transaction.on_commit` ensures notifications fire only after DB commit succeeds.
+- **Token auth**: WebSocket uses the same DRF Token as REST API, passed via query string.
+- **Debounced refresh**: `useRealtimeRefresh` hook debounces rapid events (500ms default) to prevent re-fetch storms.
+
+### Channel Groups
+
+| Group | Members | Events |
+|-------|---------|--------|
+| `user_{id}` | Individual user | Policy, payment, claim, endorsement changes for that user |
+| `role_STAFF` | All staff users | All domain events (policy, payment, claim, endorsement, broker, reconciliation) |
+
+### Event Types
+
+| Prefix | Events |
+|--------|--------|
+| `policy.` | created, cancelled, updated |
+| `payment.` | checkout_created, succeeded, failed |
+| `refund.` | succeeded |
+| `claim.` | created, reserve_set, payment_created, payment_approved, payout_executed, payout_settled, payout_returned, payout_failed, destination_verified |
+| `endorsement.` | created, approved, applied, corrected |
+| `broker.` | kyb_updated |
+| `reconciliation.` | completed |
 
 ### Trial Cost Trade-Offs
 
@@ -368,3 +431,5 @@ No direct ECS-to-RDS access; all database traffic goes through RDS Proxy with TL
 - **Reconciliation**: Compares local Payment/Refund records against Stripe provider truth. Detects breaks (MISSING_IN_LEDGER, MISSING_IN_PROVIDER, AMOUNT_MISMATCH, STATUS_MISMATCH). Break lifecycle: OPEN → ACKNOWLEDGED → RESOLVED
 - **MCP server**: FastMCP-based with 3 read tools (policy, claim, breaks) + 1 write tool (create_action_request → approval queue). Agent writes cannot bypass maker-checker or mutate the ledger
 - **Stripe idempotency keys**: Outbound API calls include idempotency_key in metadata for Stripe-side deduplication
+- **WebSocket notify-then-refetch**: Lightweight events (type + resource ID) trigger existing page `loadData()`. Best-effort delivery via Redis channel layer.
+- **Daphne ASGI**: Serves both HTTP and WebSocket on port 8000. Replaced Gunicorn WSGI.

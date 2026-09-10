@@ -40,6 +40,10 @@ backend/
 │   │   └── test_claims_flow.py    # Claim intake, reserves, payments, maker-checker, payout
 │   ├── reconciliation/tests/
 │   │   └── test_reconciliation.py  # Reconciliation runs, breaks, resolution, MCP safety
+│   ├── ws/tests/
+│   │   ├── test_consumers.py       # WebSocket connect, notify forwarding
+│   │   ├── test_middleware.py       # Token auth (valid, invalid, missing)
+│   │   └── test_notifications.py   # Group routing, graceful degradation
 │   └── policies/tests/
 │       ├── test_policy_issuance.py # Issuance, approved broker guard, charges, API
 │       ├── test_policy_term.py     # Calendar anniversary logic
@@ -61,8 +65,9 @@ backend/
 | Claims | 22 | Claim submission (active policy, outside-coverage rejection, pre-cancellation validity), reserves (initial sets status, adjustments append not mutate, incurred = paid + reserve, journal entries, negative adjustment, no double initial), payments (over limit rejected, small auto-approved, large needs approval), maker-checker (self-approval blocked, second staff approves), payout flow (execute sets pending, settled creates ledger entries, duplicate settled idempotent, returned compensating entries), payout destination (unverified blocks, no destination blocks, SIMULATED label, failed verification blocks) |
 | Cancellation & Refunds | 19 | Pro-rata (mid-term unearned, refundable tax on unearned, commission clawback match, last-day zero refund, before-effective error), leap year (366-day term), cancel flow (creates pending refund, records event, non-active raises, open claim survives), refund ledger (posts on success, balanced entry, clawback posted, idempotent, posts once), broker statement (ties to ledger, with clawback, rerun identical, data contains details) |
 | Reconciliation & MCP | 10 | Clean run (no breaks), missing in provider, missing in ledger, amount mismatch, duplicate webhook harmless, out-of-order webhook tolerated, provider outage (FAILED run), break resolution, MCP agent cannot approve own action, MCP tools no ledger mutation |
+| WebSocket | 9 | Token auth (valid/invalid/missing), consumer connect, notify forwarding, group routing, graceful degradation (no layer, exception) |
 
-**Total: 188 tests**
+**Total: 197 tests**
 
 ## Frontend
 
@@ -127,7 +132,7 @@ npx cdk synth       # CloudFormation template generation
 | EcsStack | 6 | Cluster exists, configured Fargate task count, ECR repo with scan-on-push, public-facing ALB, app secrets, Route 53 record when domain configured |
 | FrontendStack | 4 | S3 private bucket (all public access blocked), CloudFront distribution, WAF CLOUDFRONT scope, Route 53 record when domain configured |
 
-**Total: 17 CDK tests + 188 backend tests = 205 tests**
+**Total: 17 CDK tests + 197 backend tests = 214 tests**
 
 ## Linting & Formatting
 

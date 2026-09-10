@@ -58,3 +58,7 @@ class CreatePolicySerializer(serializers.Serializer):
     effective_date = serializers.DateField()
     premium_amount_cents = serializers.IntegerField(min_value=1)
     coverage_territory = serializers.CharField(max_length=2)
+
+
+class UpdateEffectiveDateSerializer(serializers.Serializer):
+    effective_date = serializers.DateField()

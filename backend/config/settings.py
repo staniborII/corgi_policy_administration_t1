@@ -17,6 +17,7 @@ ALLOWED_HOSTS = [
 ]
 
 INSTALLED_APPS = [
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -37,9 +38,11 @@ INSTALLED_APPS = [
     "apps.reconciliation",
     "apps.documents",
     "apps.integrations",
+    "channels",
 ]
 
 MIDDLEWARE = [
+    "config.middleware.HealthCheckMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -69,12 +72,17 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "config.wsgi.application"
+ASGI_APPLICATION = "config.asgi.application"
 
 DB_TYPE = os.environ.get("DB_TYPE", "sqlite")
 
 if os.environ.get("DATABASE_URL"):
     DATABASES = {"default": dj_database_url.config(conn_max_age=600)}
 elif DB_TYPE == "postgres":
+    _db_options: dict = {}
+    _sslmode = os.environ.get("DB_SSLMODE", "")
+    if _sslmode:
+        _db_options["sslmode"] = _sslmode
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
@@ -84,6 +92,7 @@ elif DB_TYPE == "postgres":
             "HOST": os.environ.get("DB_HOST", "localhost"),
             "PORT": os.environ.get("DB_PORT", "5432"),
             "CONN_MAX_AGE": 600,
+            **( {"OPTIONS": _db_options} if _db_options else {} ),
         }
     }
 else:
@@ -144,6 +153,22 @@ PERSONA_API_KEY = os.environ.get("PERSONA_API_KEY", "")
 PERSONA_WEBHOOK_SECRET = os.environ.get("PERSONA_WEBHOOK_SECRET", "")
 PERSONA_TEMPLATE_ID = os.environ.get("PERSONA_TEMPLATE_ID", "")
 PERSONA_API_BASE = os.environ.get("PERSONA_API_BASE", "https://withpersona.com/api/v1")
+
+# S3 document storage
+DOCUMENTS_BUCKET_NAME = os.environ.get("DOCUMENTS_BUCKET_NAME", "")
+AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
+
+# Redis / Channels
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [REDIS_URL],
+        },
+    },
+}
 
 # Stripe
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")

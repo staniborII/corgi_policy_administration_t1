@@ -368,6 +368,41 @@ Format:
 - **Alternatives considered:** structlog (more features, but extra dependency for trial), JSON formatter (overkill for trial, structured text is human-readable).
 - **Impact / follow-up:** In production, LOG_LEVEL=WARNING reduces noise. Log output visible in ECS CloudWatch logs.
 
+## 2026-09-10 09:00 - WebSocket: Daphne ASGI replaces Gunicorn WSGI
+- **Decision:** Replaced Gunicorn (WSGI) with Daphne (ASGI) as the production application server. Daphne serves both HTTP and WebSocket on port 8000.
+- **Reason:** WebSocket support requires an ASGI server. Daphne is Django Channels' recommended ASGI server and handles both protocols on a single port, avoiding routing complexity.
+- **Assumption / evidence:** Daphne is the official ASGI server for Django Channels. Single-port serving simplifies ALB/CloudFront configuration.
+- **Alternatives considered:** Uvicorn (requires separate routing config), Gunicorn with Uvicorn workers (more complex setup), separate WebSocket port (complicates infrastructure).
+- **Impact / follow-up:** Supersedes M8 decision "Gunicorn as production WSGI server." Docker CMD and entrypoint updated. No performance regression expected for HTTP traffic.
+
+## 2026-09-10 09:00 - WebSocket: Notify-then-refetch pattern
+- **Decision:** WebSocket sends lightweight JSON events (event type + resource ID). Frontend pages react by calling their existing `loadData()` functions via the `useRealtimeRefresh` hook with 500ms debounce.
+- **Reason:** Avoids rewriting frontend state management. Pages already have data-fetching logic — WebSocket just triggers a re-fetch. Debouncing prevents rapid re-fetch storms from burst events.
+- **Assumption / evidence:** All pages already implement `loadData()` or equivalent. The pattern requires minimal page changes (1-2 lines per page).
+- **Alternatives considered:** Push full data via WebSocket (complex state sync, stale data risks), Redux/Zustand store (over-engineering for this use case), Server-Sent Events (one-directional only, less browser support for reconnection).
+- **Impact / follow-up:** 12 frontend pages integrated. No changes to REST API endpoints.
+
+## 2026-09-10 09:00 - WebSocket: Best-effort notifications with transaction.on_commit
+- **Decision:** Service function notifications use `transaction.on_commit` to fire only after DB commit. Notification calls are wrapped in try/except so Redis failures don't break service functions.
+- **Reason:** Notifications must not fire for rolled-back transactions. Redis is a non-critical dependency — service functions must succeed even if real-time delivery fails.
+- **Assumption / evidence:** `transaction.on_commit` is Django's standard pattern for post-commit side effects. Clients fall back to manual refresh if WebSocket is unavailable.
+- **Alternatives considered:** Fire notifications immediately (risks notifying about uncommitted data), make Redis required (single point of failure for all service operations).
+- **Impact / follow-up:** If Redis is down, all REST API and service operations continue normally. WebSocket clients auto-reconnect every 3 seconds.
+
+## 2026-09-10 09:00 - WebSocket: DRF Token auth via query string
+- **Decision:** WebSocket authentication reads the DRF auth token from the query string (`?token=<key>`) and looks up the user via `rest_framework.authtoken.models.Token`.
+- **Reason:** WebSocket protocol does not support custom headers during the handshake. Query string is the standard approach for passing auth tokens to WebSocket endpoints.
+- **Assumption / evidence:** The frontend already stores the DRF token for REST API calls. Reusing it for WebSocket avoids a separate auth mechanism.
+- **Alternatives considered:** Cookie-based auth (frontend is a static SPA on a different origin), separate WebSocket token (unnecessary complexity), no auth (security violation).
+- **Impact / follow-up:** Anonymous connections are rejected with close code 4001.
+
+## 2026-09-10 09:00 - WebSocket: ElastiCache Redis for AWS channel layer
+- **Decision:** Added a CacheStack with ElastiCache Redis (`cache.t4g.micro`, single node) in private subnets. Security group allows inbound from ECS SG only on port 6379.
+- **Reason:** Django Channels requires a shared channel layer backend when multiple ECS tasks run. ElastiCache provides managed Redis without operational overhead.
+- **Assumption / evidence:** `cache.t4g.micro` is sufficient for trial WebSocket load. Single node acceptable for trial (no replication).
+- **Alternatives considered:** Redis on ECS sidecar (per-task, no cross-task messaging), self-managed EC2 Redis (operational burden), In-memory layer (single-process only, breaks with multiple ECS tasks).
+- **Impact / follow-up:** Stack deploy order updated: Network → Database → Cache → ECS → Frontend. CloudFront `/ws/*` behavior added to forward WebSocket upgrade headers.
+
 ## 2026-09-09 18:30 - M10: UI hardening with skeleton loading and retry
 - **Decision:** Replaced "Loading..." text with Skeleton components on 4 key screens (staff policy detail, customer policy detail, customer policies list, staff reconciliation). Added Retry buttons to error states across all 4 screens.
 - **Reason:** Skeleton loading states provide better perceived performance and visual feedback. Retry buttons let users recover from transient network errors without refreshing the page.

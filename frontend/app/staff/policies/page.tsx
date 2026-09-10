@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { useRealtimeRefresh } from "@/lib/useRealtimeRefresh";
 import { api, type Policy, type Broker, type User, ApiError } from "@/lib/api";
 import Nav from "@/components/Nav";
 import { formatCents } from "@/lib/format";
@@ -51,6 +52,8 @@ export default function StaffPoliciesPage() {
     }
     loadData();
   }, [user, loading, router]);
+
+  useRealtimeRefresh(["policy.", "payment."], loadData);
 
   async function loadData() {
     setLoadingData(true);
@@ -282,7 +285,13 @@ export default function StaffPoliciesPage() {
                   <TableCell>
                     <StatusBadge status={p.status} />
                   </TableCell>
-                  <TableCell>{p.effective_date}</TableCell>
+                  <TableCell>
+                    {p.effective_date}
+                    {(p.status === "DRAFT" || p.status === "PENDING_PAYMENT") &&
+                      new Date(p.effective_date + "T00:00:00") < new Date(new Date().toDateString()) && (
+                      <span className="ml-1 text-xs font-medium text-red-600">EXPIRED</span>
+                    )}
+                  </TableCell>
                   <TableCell>{p.expiration_date}</TableCell>
                   <TableCell>{formatCents(p.premium_amount_cents)}</TableCell>
                   <TableCell>{p.coverage_territory}</TableCell>

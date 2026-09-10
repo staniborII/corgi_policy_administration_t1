@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { useRealtimeRefresh } from "@/lib/useRealtimeRefresh";
 import { api, type Broker, ApiError } from "@/lib/api";
 import Nav from "@/components/Nav";
 import { StatusBadge } from "@/components/status-badge";
@@ -47,6 +48,8 @@ export default function BrokersPage() {
     }
     loadBrokers();
   }, [user, loading, router]);
+
+  useRealtimeRefresh("broker.", loadBrokers);
 
   async function loadBrokers() {
     setLoadingData(true);

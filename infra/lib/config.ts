@@ -40,5 +40,9 @@ export function loadConfig(stage: string): CorgiConfig {
       `No config for stage "${stage}". Available: ${Object.keys(file.environments).join(', ')}`,
     );
   }
+
+  config.account = process.env.CDK_DEFAULT_ACCOUNT || process.env.AWS_ACCOUNT_ID || config.account || '';
+  config.region = process.env.CDK_DEFAULT_REGION || process.env.AWS_REGION || config.region || 'us-east-1';
+
   return config;
 }

@@ -9,8 +9,8 @@ from apps.accounts.permissions import IsStaffUser
 from apps.payments.serializers import CancelPolicySerializer, RefundSerializer
 from apps.policies.models import FeeRule, Policy, TaxRule
 from apps.policies.selectors import get_policy_as_of
-from apps.policies.serializers import CreatePolicySerializer, PolicyDetailSerializer, PolicySerializer
-from apps.policies.services import PolicyError, cancel_policy, decline_policy, issue_policy
+from apps.policies.serializers import CreatePolicySerializer, PolicyDetailSerializer, PolicySerializer, UpdateEffectiveDateSerializer
+from apps.policies.services import PolicyError, cancel_policy, decline_policy, issue_policy, update_policy_effective_date
 
 
 class PolicyListView(APIView):
@@ -133,6 +133,27 @@ class CancelPolicyView(APIView):
             response_data["refund"] = RefundSerializer(result["refund"]).data
 
         return Response(response_data)
+
+
+class UpdateEffectiveDateView(APIView):
+    permission_classes = [IsStaffUser]
+
+    def post(self, request, pk):
+        serializer = UpdateEffectiveDateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            policy = update_policy_effective_date(
+                policy_id=pk,
+                new_effective_date=serializer.validated_data["effective_date"],
+                updated_by=request.user,
+            )
+        except Policy.DoesNotExist:
+            return Response({"detail": "Policy not found."}, status=status.HTTP_404_NOT_FOUND)
+        except PolicyError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(PolicySerializer(policy).data)
 
 
 class DeclinePolicyView(APIView):

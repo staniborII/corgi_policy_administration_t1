@@ -295,6 +295,36 @@ Provides an MCP (Model Context Protocol) interface for AI agent interaction with
 - Valid action types: CLAIM_PAYMENT, REFUND, PAYOUT
 - Valid target types: claim_payment, refund
 
+## Redis (WebSocket Channel Layer)
+
+### Purpose
+
+Redis serves as the channel layer backend for Django Channels, enabling WebSocket-based real-time event delivery from backend service functions to connected frontend clients.
+
+### Architecture
+
+- **Backend**: Django Channels with `channels_redis.core.RedisChannelLayer`
+- **Server**: Daphne ASGI server (serves both HTTP and WebSocket on port 8000)
+- **Frontend**: WebSocketProvider context + `useRealtimeRefresh` hook
+- **AWS**: ElastiCache Redis (`cache.t4g.micro`, single node, private subnets)
+
+### Environment Variables
+
+| Variable | Purpose |
+|----------|---------|
+| `REDIS_URL` | Redis connection URL (default: `redis://localhost:6379/0`) |
+
+### Docker Compose
+
+Redis is provided via `redis:7-alpine` with health check. Backend depends on Redis being healthy before starting.
+
+### Graceful Degradation
+
+If Redis is unavailable:
+- WebSocket connections will fail (clients auto-reconnect every 3s)
+- Service functions continue to work normally — notification calls are wrapped in try/except
+- REST API remains fully functional (Daphne serves HTTP independently of the channel layer)
+
 ## Webhook Event Model
 
 All provider webhooks are logged in the `WebhookEvent` model:

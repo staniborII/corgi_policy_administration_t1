@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { useRealtimeRefresh } from "@/lib/useRealtimeRefresh";
 import {
   api,
   ApiError,
@@ -81,6 +82,8 @@ function ClaimDetailContent() {
     if (loading || !user || !claimId) return;
     reload();
   }, [loading, user, claimId, reload]);
+
+  useRealtimeRefresh("claim.", reload);
 
   function getErrorMessage(err: unknown): string {
     if (err instanceof ApiError) {

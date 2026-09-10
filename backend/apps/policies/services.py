@@ -8,6 +8,7 @@ from django.utils import timezone
 from apps.brokers.models import Broker
 from apps.policies.models import FeeRule, Policy, PolicyEvent
 from apps.policies.selectors import get_applicable_fee_rules, get_applicable_tax_rules
+from apps.ws.notifications import notify_policy_change
 
 _ONE = Decimal("1")
 _BPS_DIVISOR = Decimal("10000")
@@ -128,6 +129,8 @@ def issue_policy(*, customer, broker_id, effective_date, premium_amount_cents, c
             "broker_commission_rate_bps": broker.commission_rate_bps,
         },
     )
+
+    transaction.on_commit(lambda: notify_policy_change(policy, "policy.created"))
 
     return policy, charges
 
@@ -255,7 +258,56 @@ def cancel_policy(*, policy_id, cancelled_by, cancellation_date=None):
         },
     )
 
+    transaction.on_commit(lambda: notify_policy_change(policy, "policy.cancelled"))
+
     return {"policy": policy, "refund": refund, **refund_data}
+
+
+@transaction.atomic
+def update_policy_effective_date(*, policy_id, new_effective_date, updated_by):
+    from apps.payments.models import Payment
+
+    policy = Policy.objects.select_for_update().get(id=policy_id)
+
+    if policy.status not in (Policy.Status.DRAFT, Policy.Status.PENDING_PAYMENT):
+        raise PolicyError("Can only update the effective date on an unpaid policy")
+
+    if new_effective_date < date.today():
+        raise PolicyError("New effective date must be today or in the future")
+
+    old_effective_date = policy.effective_date
+    old_expiration_date = policy.expiration_date
+    was_pending = policy.status == Policy.Status.PENDING_PAYMENT
+
+    policy.effective_date = new_effective_date
+    policy.expiration_date = calculate_policy_expiration(new_effective_date)
+    if was_pending:
+        policy.status = Policy.Status.DRAFT
+    policy.save(update_fields=["effective_date", "expiration_date", "status", "updated_at"])
+
+    if was_pending:
+        stale_payments = Payment.objects.filter(policy=policy, status=Payment.Status.PENDING)
+        stale_count = stale_payments.update(status=Payment.Status.FAILED)
+    else:
+        stale_count = 0
+
+    PolicyEvent.objects.create(
+        policy=policy,
+        event_type=PolicyEvent.EventType.EFFECTIVE_DATE_UPDATED,
+        effective_at=timezone.now(),
+        created_by=updated_by,
+        data={
+            "old_effective_date": str(old_effective_date),
+            "old_expiration_date": str(old_expiration_date),
+            "new_effective_date": str(policy.effective_date),
+            "new_expiration_date": str(policy.expiration_date),
+            "stale_payments_cancelled": stale_count,
+        },
+    )
+
+    transaction.on_commit(lambda: notify_policy_change(policy, "policy.updated"))
+
+    return policy
 
 
 @transaction.atomic
@@ -284,5 +336,7 @@ def decline_policy(*, policy_id, declined_by):
         created_by=declined_by,
         data={"reason": "Declined by customer before payment"},
     )
+
+    transaction.on_commit(lambda: notify_policy_change(policy, "policy.cancelled"))
 
     return policy

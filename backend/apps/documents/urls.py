@@ -9,4 +9,6 @@ urlpatterns = [
         views.EndorsementScheduleDownloadView.as_view(),
         name="endorsement-schedule-pdf",
     ),
+    path("policy/<int:policy_id>/", views.PolicyDocumentsListView.as_view(), name="policy-documents"),
+    path("<int:document_id>/download/", views.DocumentDownloadView.as_view(), name="document-download"),
 ]

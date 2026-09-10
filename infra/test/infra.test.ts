@@ -1,13 +1,16 @@
 import * as cdk from 'aws-cdk-lib/core';
 import { Template } from 'aws-cdk-lib/assertions';
 import { NetworkStack } from '../lib/stacks/network-stack';
+import { StorageStack } from '../lib/stacks/storage-stack';
 import { DatabaseStack } from '../lib/stacks/database-stack';
 import { EcsStack } from '../lib/stacks/ecs-stack';
+import { EdgeStack } from '../lib/stacks/edge-stack';
 import { FrontendStack } from '../lib/stacks/frontend-stack';
 
 function createStacks() {
   const app = new cdk.App();
   const network = new NetworkStack(app, 'TestNetwork');
+  const storage = new StorageStack(app, 'TestStorage');
   const database = new DatabaseStack(app, 'TestDatabase', {
     vpc: network.vpc,
     ecsSg: network.ecsSg,
@@ -22,14 +25,17 @@ function createStacks() {
     dbSecret: database.dbSecret,
     rdsProxy: database.rdsProxy,
     rdsProxySg: database.rdsProxySg,
+    documentsBucket: storage.documentsBucket,
     cpu: 256,
     memory: 512,
     desiredCount: 1,
   });
+  const edge = new EdgeStack(app, 'TestEdge');
   const frontend = new FrontendStack(app, 'TestFrontend', {
     alb: ecs.alb,
+    wafAclArn: edge.webAclArn,
   });
-  return { app, network, database, ecs, frontend };
+  return { app, network, storage, database, ecs, edge, frontend };
 }
 
 describe('NetworkStack', () => {
@@ -51,7 +57,23 @@ describe('NetworkStack', () => {
   test('creates VPC endpoints for AWS services', () => {
     const { network } = createStacks();
     const template = Template.fromStack(network);
-    template.resourceCountIs('AWS::EC2::VPCEndpoint', 5);
+    template.resourceCountIs('AWS::EC2::VPCEndpoint', 6);
+  });
+});
+
+describe('StorageStack', () => {
+  test('creates private documents bucket with versioning', () => {
+    const { storage } = createStacks();
+    const template = Template.fromStack(storage);
+    template.hasResourceProperties('AWS::S3::Bucket', {
+      PublicAccessBlockConfiguration: {
+        BlockPublicAcls: true,
+        BlockPublicPolicy: true,
+        IgnorePublicAcls: true,
+        RestrictPublicBuckets: true,
+      },
+      VersioningConfiguration: { Status: 'Enabled' },
+    });
   });
 });
 
@@ -142,6 +164,7 @@ describe('EcsStack', () => {
   test('creates Route 53 record when domain config is provided', () => {
     const app = new cdk.App();
     const network = new NetworkStack(app, 'DnsTestNetwork');
+    const storageStack = new StorageStack(app, 'DnsTestStorage');
     const database = new DatabaseStack(app, 'DnsTestDatabase', {
       vpc: network.vpc,
       ecsSg: network.ecsSg,
@@ -156,9 +179,11 @@ describe('EcsStack', () => {
       dbSecret: database.dbSecret,
       rdsProxy: database.rdsProxy,
       rdsProxySg: database.rdsProxySg,
+      documentsBucket: storageStack.documentsBucket,
       cpu: 256,
       memory: 512,
       desiredCount: 1,
+      webDomainName: 'app.corgi.example.com',
       serverDomainName: 'api.corgi.example.com',
       hostedZoneId: 'Z1234567890',
       hostedZoneName: 'corgi.example.com',
@@ -168,6 +193,16 @@ describe('EcsStack', () => {
     template.hasResourceProperties('AWS::Route53::RecordSet', {
       Name: 'api.corgi.example.com.',
       Type: 'A',
+    });
+  });
+});
+
+describe('EdgeStack', () => {
+  test('creates CLOUDFRONT-scoped WAF Web ACL', () => {
+    const { edge } = createStacks();
+    const template = Template.fromStack(edge);
+    template.hasResourceProperties('AWS::WAFv2::WebACL', {
+      Scope: 'CLOUDFRONT',
     });
   });
 });
@@ -192,17 +227,10 @@ describe('FrontendStack', () => {
     template.resourceCountIs('AWS::CloudFront::Distribution', 1);
   });
 
-  test('creates WAF Web ACL', () => {
-    const { frontend } = createStacks();
-    const template = Template.fromStack(frontend);
-    template.hasResourceProperties('AWS::WAFv2::WebACL', {
-      Scope: 'CLOUDFRONT',
-    });
-  });
-
   test('creates Route 53 record when domain config is provided', () => {
     const app = new cdk.App();
     const network = new NetworkStack(app, 'WebDnsTestNetwork');
+    const storageStack = new StorageStack(app, 'WebDnsTestStorage');
     const database = new DatabaseStack(app, 'WebDnsTestDatabase', {
       vpc: network.vpc,
       ecsSg: network.ecsSg,
@@ -217,12 +245,15 @@ describe('FrontendStack', () => {
       dbSecret: database.dbSecret,
       rdsProxy: database.rdsProxy,
       rdsProxySg: database.rdsProxySg,
+      documentsBucket: storageStack.documentsBucket,
       cpu: 256,
       memory: 512,
       desiredCount: 1,
     });
+    const edge = new EdgeStack(app, 'WebDnsTestEdge');
     const frontend = new FrontendStack(app, 'WebDnsTestFrontend', {
       alb: ecs.alb,
+      wafAclArn: edge.webAclArn,
       webDomainName: 'app.corgi.example.com',
       hostedZoneId: 'Z1234567890',
       hostedZoneName: 'corgi.example.com',

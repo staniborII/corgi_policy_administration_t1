@@ -8,6 +8,7 @@ from apps.payments.models import Payment, Refund
 from apps.policies.models import Policy
 from apps.policies.services import calculate_rate_amount
 from apps.reconciliation.models import BrokerStatement, ReconciliationBreak, ReconciliationRun
+from apps.ws.notifications import notify_staff
 
 logger = logging.getLogger(__name__)
 
@@ -177,6 +178,8 @@ def run_reconciliation(*, run_date=None):
             "breaks_found": breaks_found,
         }
         recon_run.save(update_fields=["status", "completed_at", "summary"])
+
+        notify_staff("reconciliation.completed", {"run_id": recon_run.id, "breaks_found": breaks_found})
 
         logger.info(
             "Reconciliation completed: run_id=%s, breaks=%s",

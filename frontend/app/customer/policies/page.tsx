@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
-import { api, type Policy, type PaymentRecord } from "@/lib/api";
+import { useRealtimeRefresh } from "@/lib/useRealtimeRefresh";
+import { api, ApiError, type Policy, type PaymentRecord } from "@/lib/api";
 import Nav from "@/components/Nav";
 import { formatCents } from "@/lib/format";
 import { StatusBadge } from "@/components/status-badge";
@@ -30,6 +31,10 @@ export default function CustomerPoliciesPage() {
     }
   }, [user, loading, router]);
 
+  const refreshPolicies = useCallback(() => {
+    api.listPolicies().then(setPolicies).catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (loading || !user) return;
     let cancelled = false;
@@ -40,6 +45,8 @@ export default function CustomerPoliciesPage() {
       .finally(() => { if (!cancelled) setLoadingData(false); });
     return () => { cancelled = true; };
   }, [loading, user]);
+
+  useRealtimeRefresh(["policy.", "payment."], refreshPolicies);
 
   async function handlePay(policyId: number) {
     setPaymentLoading(policyId);
@@ -54,8 +61,11 @@ export default function CustomerPoliciesPage() {
         const data = await api.listPolicies();
         setPolicies(data);
       }
-    } catch {
-      setError("Failed to initiate payment.");
+    } catch (err) {
+      const message = err instanceof ApiError && err.body?.detail
+        ? String(err.body.detail)
+        : "Failed to initiate payment.";
+      setError(message);
     } finally {
       setPaymentLoading(null);
     }
@@ -69,8 +79,11 @@ export default function CustomerPoliciesPage() {
       await api.declinePolicy(policyId);
       const data = await api.listPolicies();
       setPolicies(data);
-    } catch {
-      setError("Failed to decline policy.");
+    } catch (err) {
+      const message = err instanceof ApiError && err.body?.detail
+        ? String(err.body.detail)
+        : "Failed to decline policy.";
+      setError(message);
     } finally {
       setDecliningId(null);
     }

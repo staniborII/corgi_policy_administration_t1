@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { useRealtimeRefresh } from "@/lib/useRealtimeRefresh";
 import { api, type BrokerStatementRecord, type Broker, ApiError } from "@/lib/api";
 import Nav from "@/components/Nav";
 import { formatCents } from "@/lib/format";
@@ -50,6 +51,8 @@ export default function BrokerStatementsPage() {
     }
     loadData();
   }, [user, loading, router]);
+
+  useRealtimeRefresh("reconciliation.", loadData);
 
   async function loadData() {
     setLoadingData(true);

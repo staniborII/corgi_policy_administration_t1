@@ -349,6 +349,12 @@ export const api = {
   listPolicyPayments: (policyId: number) =>
     request<PaymentRecord[]>(`/api/payments/policy/${policyId}/`),
 
+  verifyCheckoutSession: (sessionId: string) =>
+    request<PaymentRecord>("/api/payments/verify-session/", {
+      method: "POST",
+      body: JSON.stringify({ session_id: sessionId }),
+    }),
+
   simulatePayment: (paymentId: number) =>
     request<PaymentRecord>(`/api/payments/${paymentId}/simulate/`, {
       method: "POST",
@@ -462,6 +468,12 @@ export const api = {
 
   declinePolicy: (policyId: number) =>
     request<Policy>(`/api/policies/${policyId}/decline/`, { method: "POST" }),
+
+  updatePolicyEffectiveDate: (policyId: number, effectiveDate: string) =>
+    request<Policy>(`/api/policies/${policyId}/update-effective-date/`, {
+      method: "POST",
+      body: JSON.stringify({ effective_date: effectiveDate }),
+    }),
 
   listPolicyRefunds: (policyId: number) =>
     request<RefundRecord[]>(`/api/payments/policy/${policyId}/refunds/`),

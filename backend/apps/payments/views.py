@@ -1,3 +1,5 @@
+import logging
+
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -9,8 +11,11 @@ from apps.payments.services import (
     create_checkout_for_policy,
     simulate_payment_success,
     simulate_refund_success,
+    verify_checkout_session,
 )
 from apps.policies.models import Policy
+
+logger = logging.getLogger(__name__)
 
 
 class PolicyPaymentsView(APIView):
@@ -77,6 +82,35 @@ class PolicyRefundsView(APIView):
 
         refunds = Refund.objects.filter(payment__policy=policy).order_by("-created_at")
         return Response(RefundSerializer(refunds, many=True).data)
+
+
+class VerifyCheckoutSessionView(APIView):
+    """Verify a Stripe Checkout Session and process payment if completed."""
+
+    def post(self, request):
+        session_id = request.data.get("session_id")
+        logger.info("verify-session called: session_id=%s, user=%s", session_id, request.user)
+        if not session_id:
+            return Response({"detail": "session_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            payment = verify_checkout_session(session_id=session_id)
+        except Payment.DoesNotExist:
+            return Response({"detail": "Payment not found."}, status=status.HTTP_404_NOT_FOUND)
+        except PaymentError as exc:
+            logger.warning("verify-session PaymentError: %s", exc)
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:
+            logger.exception("verify-session unexpected error: %s", exc)
+            return Response({"detail": f"Verification failed: {exc}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if payment is None:
+            return Response(
+                {"detail": "Stripe is not configured. Use simulated mode."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(PaymentSerializer(payment).data)
 
 
 class SimulateRefundView(APIView):

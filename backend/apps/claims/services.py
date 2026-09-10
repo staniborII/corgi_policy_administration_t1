@@ -7,6 +7,7 @@ from apps.claims.models import Claim, ClaimPayment, PayoutDestination, ReserveEv
 from apps.ledger.models import JournalLine
 from apps.ledger.services import post_journal_entry
 from apps.policies.models import Policy
+from apps.ws.notifications import notify_claim_change
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,9 @@ def submit_claim(*, policy_id, date_of_loss, description, estimated_amount_cents
         created_by=user,
     )
     logger.info(f"Claim created: claim_id={claim.id}, policy_id={policy_id}")
+
+    transaction.on_commit(lambda: notify_claim_change(claim, "claim.created"))
+
     return claim
 
 
@@ -96,6 +100,8 @@ def set_reserve(*, claim_id, amount_cents, reserve_type, memo="", user=None):
     if claim.status == Claim.Status.OPEN:
         claim.status = Claim.Status.RESERVED
         claim.save(update_fields=["status", "updated_at"])
+
+    transaction.on_commit(lambda: notify_claim_change(claim, "claim.reserve_set"))
 
     return event
 
@@ -179,6 +185,8 @@ def create_claim_payment(*, claim_id, amount_cents, payee, user=None):
         claim.status = Claim.Status.PAYMENT_PENDING
         claim.save(update_fields=["status", "updated_at"])
 
+    transaction.on_commit(lambda: notify_claim_change(claim, "claim.payment_created"))
+
     return payment
 
 
@@ -201,6 +209,8 @@ def approve_claim_payment(*, payment_id, user):
     payment.save(update_fields=["status", "approved_by", "updated_at"])
 
     logger.info(f"Claim payment approved: payment_id={payment_id}, approved_by={user.id}")
+
+    transaction.on_commit(lambda: notify_claim_change(payment.claim, "claim.payment_approved"))
 
     return payment
 
@@ -232,6 +242,8 @@ def execute_payout(*, payment_id, user=None):
 
     logger.info(f"Payout executed: payment_id={payment_id}, provider_reference={payout_ref}")
 
+    transaction.on_commit(lambda: notify_claim_change(claim, "claim.payout_executed"))
+
     return payment
 
 
@@ -262,6 +274,8 @@ def handle_payout_settled(*, payout_reference, amount_cents):
     logger.info(f"Payout settled: payment_id={payment.id}, provider_reference={payout_reference}")
 
     _update_claim_status_after_payment(payment.claim)
+
+    transaction.on_commit(lambda: notify_claim_change(payment.claim, "claim.payout_settled"))
 
     return payment
 
@@ -305,6 +319,8 @@ def handle_payout_returned(*, payout_reference, reason=""):
 
     _update_claim_status_after_payment(payment.claim)
 
+    transaction.on_commit(lambda: notify_claim_change(payment.claim, "claim.payout_returned"))
+
     return payment
 
 
@@ -321,6 +337,8 @@ def handle_payout_failed(*, payout_reference, reason=""):
     payment.status = ClaimPayment.Status.FAILED
     payment.save(update_fields=["status", "updated_at"])
 
+    transaction.on_commit(lambda: notify_claim_change(payment.claim, "claim.payout_failed"))
+
     return payment
 
 
@@ -329,7 +347,7 @@ def _update_claim_status_after_payment(claim):
     settled_total = sum(p.amount_cents for p in payments if p.status == ClaimPayment.Status.SETTLED)
     reserve = get_reserve_balance(claim.id)
 
-    if settled_total > 0 and reserve <= 0:
+    if settled_total > 0 and settled_total >= reserve:
         claim.status = Claim.Status.PAID
     elif settled_total > 0:
         claim.status = Claim.Status.PARTIALLY_PAID
@@ -366,5 +384,8 @@ def verify_payout_destination(*, claim_id, outcome="VERIFIED"):
     if outcome == "VERIFIED":
         dest.verified_at = timezone.now()
     dest.save(update_fields=["verification_status", "verified_at", "updated_at"])
+
+    claim = dest.claim
+    transaction.on_commit(lambda: notify_claim_change(claim, "claim.destination_verified"))
 
     return dest

@@ -1,18 +1,60 @@
 import io
+import logging
 from datetime import datetime
 
+from django.contrib.contenttypes.models import ContentType
+from django.utils import timezone
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
+from apps.documents.models import Document
+from apps.documents.storage import is_s3_configured, upload_document
+from apps.policies.models import Policy
 from apps.policies.selectors import get_policy_as_of
+
+logger = logging.getLogger(__name__)
 
 
 def _fmt_cents(cents: int) -> str:
     sign = "-" if cents < 0 else ""
     return f"{sign}${abs(cents) / 100:,.2f}"
+
+
+def _s3_key(policy_id: int, document_type: str, as_of: datetime | None = None) -> str:
+    if as_of:
+        ts = as_of.strftime("%Y-%m-%dT%H%M%S")
+        return f"policies/{policy_id}/{document_type}/as-of-{ts}.pdf"
+    ts = timezone.now().strftime("%Y-%m-%dT%H%M%S")
+    return f"policies/{policy_id}/{document_type}/{ts}.pdf"
+
+
+def _persist_to_s3(
+    policy: Policy,
+    document_type: str,
+    file_name: str,
+    pdf_bytes: bytes,
+    as_of: datetime | None = None,
+) -> Document | None:
+    if not is_s3_configured():
+        return None
+
+    key = _s3_key(policy.id, document_type, as_of)
+    if not upload_document(key, pdf_bytes):
+        return None
+
+    ct = ContentType.objects.get_for_model(Policy)
+    doc = Document.objects.create(
+        content_type=ct,
+        object_id=policy.id,
+        document_type=document_type,
+        file_path=key,
+        file_name=file_name,
+    )
+    logger.info("Persisted Document id=%d for policy %d at %s", doc.id, policy.id, key)
+    return doc
 
 
 def generate_declarations_pdf(policy_id: int, as_of: datetime | None = None) -> bytes:
@@ -100,7 +142,13 @@ def generate_declarations_pdf(policy_id: int, as_of: datetime | None = None) -> 
     )
 
     doc.build(elements)
-    return buf.getvalue()
+    pdf_bytes = buf.getvalue()
+
+    policy = Policy.objects.get(id=policy_id)
+    file_name = f"declarations_{policy.policy_number}.pdf"
+    _persist_to_s3(policy, Document.DocumentType.DECLARATION, file_name, pdf_bytes, as_of)
+
+    return pdf_bytes
 
 
 def generate_endorsement_schedule_pdf(policy_id: int, as_of: datetime | None = None) -> bytes:
@@ -157,4 +205,10 @@ def generate_endorsement_schedule_pdf(policy_id: int, as_of: datetime | None = N
     )
 
     doc.build(elements)
-    return buf.getvalue()
+    pdf_bytes = buf.getvalue()
+
+    policy = Policy.objects.get(id=policy_id)
+    file_name = f"endorsement_schedule_{policy.policy_number}.pdf"
+    _persist_to_s3(policy, Document.DocumentType.ENDORSEMENT_SCHEDULE, file_name, pdf_bytes, as_of)
+
+    return pdf_bytes

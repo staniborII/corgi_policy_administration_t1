@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { useRealtimeRefresh } from "@/lib/useRealtimeRefresh";
 import {
   api,
   type Policy,
@@ -14,7 +15,7 @@ import {
 import Nav from "@/components/Nav";
 import { formatCents } from "@/lib/format";
 import { StatusBadge } from "@/components/status-badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -84,6 +85,9 @@ function StaffPolicyDetailContent() {
   const [refunds, setRefunds] = useState<RefundRecord[]>([]);
   const [simulatingRefund, setSimulatingRefund] = useState(false);
 
+  const [newEffectiveDate, setNewEffectiveDate] = useState("");
+  const [updatingDate, setUpdatingDate] = useState(false);
+
   useEffect(() => {
     if (loading) return;
     if (!user || user.role !== "STAFF") {
@@ -96,6 +100,8 @@ function StaffPolicyDetailContent() {
     }
     loadData();
   }, [user, loading, router, policyId]);
+
+  useRealtimeRefresh(["policy.", "endorsement.", "payment.", "refund."], loadData);
 
   async function loadData() {
     if (!policyId) return;
@@ -219,9 +225,50 @@ function StaffPolicyDetailContent() {
     }
   }
 
-  function pdfUrl(type: "declarations" | "endorsement-schedule", asOf?: string) {
-    const base = `${API_BASE}/api/documents/policy/${policyId}/${type}/`;
+  async function handleUpdateEffectiveDate() {
+    if (!policyId || !newEffectiveDate) return;
+    setUpdatingDate(true);
+    setError("");
+    try {
+      await api.updatePolicyEffectiveDate(parseInt(policyId, 10), newEffectiveDate);
+      setNewEffectiveDate("");
+      await loadData();
+    } catch (err) {
+      setError(err instanceof ApiError ? JSON.stringify(err.body) : "Failed to update effective date.");
+    } finally {
+      setUpdatingDate(false);
+    }
+  }
+
+  function pdfPath(type: "declarations" | "endorsement-schedule", asOf?: string) {
+    const base = `/api/documents/policy/${policyId}/${type}/`;
     return asOf ? `${base}?as_of=${encodeURIComponent(new Date(asOf).toISOString())}` : base;
+  }
+
+  async function downloadPdf(type: "declarations" | "endorsement-schedule", asOf?: string) {
+    try {
+      const { getToken } = await import("@/lib/api");
+      const t = getToken();
+      const headers: Record<string, string> = {};
+      if (t) headers["Authorization"] = `Token ${t}`;
+      const res = await fetch(`${API_BASE}${pdfPath(type, asOf)}`, { headers });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.detail || "Failed to download document.");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = res.headers.get("Content-Disposition")?.split("filename=")[1]?.replace(/"/g, "") || `${type}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError("Failed to download document.");
+    }
   }
 
   if (loading || !user) return null;
@@ -300,6 +347,36 @@ function StaffPolicyDetailContent() {
           <div>Territory: {policy.coverage_territory}</div>
         </div>
 
+        {/* Effective date expired warning */}
+        {(policy.status === "DRAFT" || policy.status === "PENDING_PAYMENT") &&
+          new Date(policy.effective_date + "T00:00:00") < new Date(new Date().toDateString()) && (
+          <Card className="mt-4 border-red-200 bg-red-50">
+            <CardHeader>
+              <CardTitle className="text-red-800">Effective Date Has Passed</CardTitle>
+              <CardDescription className="text-red-700">
+                This policy&apos;s effective date ({policy.effective_date}) has passed. The customer cannot pay until the date is updated.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap items-center gap-2">
+                <Label className="text-sm">New Effective Date:</Label>
+                <Input
+                  type="date"
+                  value={newEffectiveDate}
+                  onChange={(e) => setNewEffectiveDate(e.target.value)}
+                  className="w-auto"
+                />
+                <Button
+                  onClick={handleUpdateEffectiveDate}
+                  disabled={updatingDate || !newEffectiveDate}
+                >
+                  {updatingDate ? "Updating..." : "Update Effective Date"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Error display */}
         {error && (
           <Alert variant="destructive" className="mt-3">
@@ -321,12 +398,12 @@ function StaffPolicyDetailContent() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
-              <a href={pdfUrl("declarations")} className={buttonVariants()}>
+              <Button onClick={() => downloadPdf("declarations")}>
                 Download Declarations
-              </a>
-              <a href={pdfUrl("endorsement-schedule")} className={buttonVariants()}>
+              </Button>
+              <Button onClick={() => downloadPdf("endorsement-schedule")}>
                 Download Endorsement Schedule
-              </a>
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -351,12 +428,12 @@ function StaffPolicyDetailContent() {
               </Button>
               {asOfDate && (
                 <>
-                  <a href={pdfUrl("declarations", asOfDate)} className="text-sm text-primary underline-offset-4 hover:underline">
+                  <Button variant="link" size="sm" onClick={() => downloadPdf("declarations", asOfDate)}>
                     Declarations PDF (as-of)
-                  </a>
-                  <a href={pdfUrl("endorsement-schedule", asOfDate)} className="text-sm text-primary underline-offset-4 hover:underline">
+                  </Button>
+                  <Button variant="link" size="sm" onClick={() => downloadPdf("endorsement-schedule", asOfDate)}>
                     Schedule PDF (as-of)
-                  </a>
+                  </Button>
                 </>
               )}
             </div>

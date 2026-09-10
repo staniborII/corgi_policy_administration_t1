@@ -15,6 +15,16 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: ./backend
@@ -27,8 +37,12 @@ services:
       DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1,0.0.0.0"
       DATABASE_URL: postgres://corgi_user:corgi_pass@db:5432/corgi_dev
       CORS_ALLOWED_ORIGINS: "http://localhost:3000"
+      DOCUMENTS_BUCKET_NAME: ""
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/')"]
@@ -42,6 +56,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     command: ["python", "manage.py", "migrate", "--noinput"]
+    entrypoint: []
     environment:
       DJANGO_SECRET_KEY: local-dev-secret-not-for-production
       DATABASE_URL: postgres://corgi_user:corgi_pass@db:5432/corgi_dev

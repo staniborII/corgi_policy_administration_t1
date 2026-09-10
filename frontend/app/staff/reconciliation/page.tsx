@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { useRealtimeRefresh } from "@/lib/useRealtimeRefresh";
 import {
   api,
   type ReconciliationRunRecord,
@@ -58,6 +59,8 @@ export default function ReconciliationPage() {
     }
     loadData();
   }, [user, loading, router]);
+
+  useRealtimeRefresh("reconciliation.", loadData);
 
   async function loadData() {
     setLoadingData(true);

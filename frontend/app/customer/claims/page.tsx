@@ -1,8 +1,9 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { useRealtimeRefresh } from "@/lib/useRealtimeRefresh";
 import { api, type ClaimRecord, type Policy } from "@/lib/api";
 import Nav from "@/components/Nav";
 import { formatCents } from "@/lib/format";
@@ -40,6 +41,16 @@ function ClaimsContent() {
     }
   }, [user, loading, router]);
 
+  const refreshData = useCallback(() => {
+    Promise.all([
+      api.listClaims(policyId ? Number(policyId) : undefined),
+      api.listPolicies(),
+    ]).then(([claimsData, policiesData]) => {
+      setClaims(claimsData);
+      setPolicies(policiesData);
+    }).catch(() => {});
+  }, [policyId]);
+
   useEffect(() => {
     if (loading || !user) return;
     let cancelled = false;
@@ -60,6 +71,8 @@ function ClaimsContent() {
 
     return () => { cancelled = true; };
   }, [loading, user, policyId]);
+
+  useRealtimeRefresh("claim.", refreshData);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
+import { WebSocketProvider } from "@/lib/websocket";
 import { Geist } from "next/font/google";
 import { cn } from "@/lib/utils";
 
@@ -19,7 +20,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={cn("font-sans", geist.variable)}>
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <WebSocketProvider>{children}</WebSocketProvider>
+        </AuthProvider>
       </body>
     </html>
   );
