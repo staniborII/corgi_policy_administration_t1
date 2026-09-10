@@ -60,8 +60,15 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     const token = getToken();
     if (!token) return;
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-    const wsUrl = apiUrl.replace(/^http/, "ws") + `/ws/events/?token=${token}`;
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+    let wsBase: string;
+    if (apiUrl) {
+      wsBase = apiUrl.replace(/^http/, "ws");
+    } else {
+      const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+      wsBase = `${proto}//${window.location.host}`;
+    }
+    const wsUrl = wsBase + `/ws/events/?token=${token}`;
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;

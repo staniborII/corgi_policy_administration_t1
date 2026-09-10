@@ -3,7 +3,7 @@ FROM python:3.12.12-slim AS builder
 
 RUN pip install --no-cache-dir uv==0.9.27
 
-WORKDIR /build
+WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
@@ -17,8 +17,8 @@ RUN groupadd --gid 1000 appuser && \
 
 WORKDIR /app
 
-COPY --from=builder /build/.venv /app/.venv
-COPY --from=builder /build/ /app/
+COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /app/ /app/
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
