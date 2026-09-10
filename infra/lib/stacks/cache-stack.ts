@@ -21,7 +21,7 @@ export class CacheStack extends cdk.Stack {
       description: 'Allow ECS tasks to connect to Redis',
     });
 
-    redisSg.addIngressRule(ecsSg, ec2.Port.tcp(6379), 'ECS -> Redis');
+    redisSg.addIngressRule(ecsSg, ec2.Port.tcp(6379), 'ECS to Redis');
 
     const subnetGroup = new elasticache.CfnSubnetGroup(this, 'RedisSubnetGroup', {
       description: 'Subnets for Corgi Redis',
