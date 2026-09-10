@@ -4,7 +4,7 @@ from rest_framework.views import APIView
 
 from apps.accounts.permissions import IsStaffUser
 from apps.brokers.models import Broker
-from apps.brokers.serializers import BrokerSerializer, CreateBrokerSerializer
+from apps.brokers.serializers import BrokerSerializer, CreateBrokerSerializer, KYBVerificationSerializer
 from apps.brokers.services import BrokerError, create_broker, initiate_kyb
 
 
@@ -46,4 +46,4 @@ class BrokerKYBInitiateView(APIView):
             return Response({"detail": "Broker not found."}, status=status.HTTP_404_NOT_FOUND)
         except BrokerError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-        return Response({"inquiry_id": kyb.persona_inquiry_id}, status=status.HTTP_201_CREATED)
+        return Response(KYBVerificationSerializer(kyb).data, status=status.HTTP_201_CREATED)

@@ -250,7 +250,7 @@ def verify_checkout_session(*, session_id):
     try:
         payment = Payment.objects.get(stripe_checkout_session_id=session_id)
     except Payment.DoesNotExist:
-        raise PaymentError(f"No payment found for session {session_id}")
+        raise PaymentError(f"No payment found for session {session_id}") from None
 
     if payment.status == Payment.Status.SUCCEEDED:
         return payment
@@ -259,6 +259,9 @@ def verify_checkout_session(*, session_id):
         raise PaymentError(f"Payment is in {payment.status} state and cannot be verified")
 
     session = retrieve_checkout_session(session_id)
+
+    if session is None:
+        return payment
 
     if session.payment_status == "paid":
         payment_intent_id = session.payment_intent or ""

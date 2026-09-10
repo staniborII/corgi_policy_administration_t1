@@ -64,6 +64,8 @@ def create_checkout_session(*, amount_cents, currency="usd", metadata=None, succ
 
 def retrieve_checkout_session(session_id):
     """Retrieve a Stripe Checkout Session by ID."""
+    if session_id.startswith(SIMULATED_PREFIX):
+        return None
     stripe.api_key = settings.STRIPE_SECRET_KEY
     return stripe.checkout.Session.retrieve(session_id)
 
@@ -71,13 +73,14 @@ def retrieve_checkout_session(session_id):
 def create_stripe_refund(*, payment_intent_id, amount_cents, metadata=None):
     """
     Create a Stripe refund against a PaymentIntent.
-    Falls back to SIMULATED mode when STRIPE_SECRET_KEY is not configured.
+    Falls back to SIMULATED mode when STRIPE_SECRET_KEY is not configured
+    or the payment_intent_id is a simulated reference.
     """
     secret_key = settings.STRIPE_SECRET_KEY
 
-    if not secret_key:
+    if not secret_key or payment_intent_id.startswith(SIMULATED_PREFIX):
         simulated_id = f"{SIMULATED_PREFIX}-rf-{uuid.uuid4().hex[:12]}"
-        logger.warning("STRIPE_SECRET_KEY not configured — returning SIMULATED refund: %s", simulated_id)
+        logger.warning("Simulated refund for payment_intent %s: %s", payment_intent_id, simulated_id)
         return {"refund_id": simulated_id, "simulated": True}
 
     stripe.api_key = secret_key

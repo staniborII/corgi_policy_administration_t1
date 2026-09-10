@@ -1,6 +1,18 @@
 from django.contrib import admin
 
-from apps.integrations.models import WebhookEvent
+from apps.integrations.models import KYBProviderConfig, WebhookEvent
+
+
+@admin.register(KYBProviderConfig)
+class KYBProviderConfigAdmin(admin.ModelAdmin):
+    list_display = ("active_provider", "updated_at")
+    fields = ("active_provider",)
+
+    def has_add_permission(self, request):
+        return not KYBProviderConfig.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(WebhookEvent)

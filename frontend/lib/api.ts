@@ -61,12 +61,24 @@ export interface User {
   role: "STAFF" | "CUSTOMER";
 }
 
+export interface KYBVerification {
+  id: number;
+  provider: "STRIPE_CONNECT" | "PERSONA" | "SIMULATED";
+  provider_reference: string;
+  persona_inquiry_id: string;
+  status: string;
+  onboarding_url: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Broker {
   id: number;
   company_name: string;
   commission_rate_bps: number;
   status: string;
-  latest_kyb: { id: number; persona_inquiry_id: string; status: string } | null;
+  stripe_connect_account_id: string;
+  latest_kyb: KYBVerification | null;
   created_at: string;
 }
 
@@ -317,7 +329,7 @@ export const api = {
     request<Broker>("/api/brokers/", { method: "POST", body: JSON.stringify(data) }),
 
   initiateKyb: (brokerId: number) =>
-    request<{ inquiry_id: string }>(`/api/brokers/${brokerId}/kyb/`, { method: "POST" }),
+    request<KYBVerification>(`/api/brokers/${brokerId}/kyb/`, { method: "POST" }),
 
   listJurisdictions: () =>
     request<string[]>("/api/policies/jurisdictions/"),

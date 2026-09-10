@@ -7,7 +7,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.brokers.services import process_kyb_webhook
+from apps.brokers.services import process_connect_account_updated, process_kyb_webhook
 from apps.integrations.persona.webhooks import (
     mark_webhook_failed,
     mark_webhook_processed,
@@ -59,7 +59,7 @@ class PersonaWebhookView(APIView):
         )
 
         if not created:
-            logger.info(f"Persona webhook duplicate event skipped: event_id={event_id}")
+            logger.info("Persona webhook duplicate event skipped: event_id=%s", event_id)
             return Response({"detail": "Already processed"}, status=status.HTTP_200_OK)
 
         try:
@@ -123,13 +123,13 @@ class StripeWebhookView(APIView):
         )
 
         if not created:
-            logger.info(f"Stripe webhook duplicate event skipped: event_id={event_id}, type={event_type}")
+            logger.info("Stripe webhook duplicate event skipped: event_id=%s, type=%s", event_id, event_type)
             return Response({"detail": "Already processed"}, status=status.HTTP_200_OK)
 
         try:
             self._dispatch_event(event_type, event_data)
             mark_webhook_processed(webhook_event)
-            logger.info(f"Stripe webhook processed successfully: event_id={event_id}, type={event_type}")
+            logger.info("Stripe webhook processed: event_id=%s, type=%s", event_id, event_type)
         except Exception:
             logger.exception("Error processing Stripe webhook %s", event_id)
             mark_webhook_failed(webhook_event, "Processing error")
@@ -144,6 +144,8 @@ class StripeWebhookView(APIView):
             self._handle_checkout_expired(event_data)
         elif event_type == "charge.refunded":
             self._handle_charge_refunded(event_data)
+        elif event_type == "account.updated":
+            self._handle_account_updated(event_data)
 
     def _handle_checkout_completed(self, event_data):
         session = event_data.get("data", {}).get("object", {})
@@ -193,3 +195,30 @@ class StripeWebhookView(APIView):
 
             if refund_data.get("status") == "succeeded":
                 handle_refund_success(refund_id=refund.id)
+
+    def _handle_account_updated(self, event_data):
+        account_obj = event_data.get("data", {}).get("object", {})
+        account_id = account_obj.get("id", "") or event_data.get("account", "")
+
+        if not account_id:
+            logger.warning("account.updated webhook missing account ID")
+            return
+
+        charges_enabled = account_obj.get("charges_enabled", False)
+        requirements = account_obj.get("requirements", {})
+        requirements_due = requirements.get("currently_due", [])
+        disabled_reason = requirements.get("disabled_reason")
+
+        logger.info(
+            "Connect account.updated: account=%s, charges_enabled=%s, requirements_due=%s",
+            account_id,
+            charges_enabled,
+            len(requirements_due),
+        )
+
+        process_connect_account_updated(
+            account_id=account_id,
+            charges_enabled=charges_enabled,
+            requirements_due=requirements_due,
+            disabled_reason=disabled_reason,
+        )

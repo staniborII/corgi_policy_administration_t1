@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     "apps.reconciliation",
     "apps.documents",
     "apps.integrations",
+    "apps.mcp",
     "channels",
 ]
 
@@ -92,7 +93,7 @@ elif DB_TYPE == "postgres":
             "HOST": os.environ.get("DB_HOST", "localhost"),
             "PORT": os.environ.get("DB_PORT", "5432"),
             "CONN_MAX_AGE": 600,
-            **( {"OPTIONS": _db_options} if _db_options else {} ),
+            **({"OPTIONS": _db_options} if _db_options else {}),
         }
     }
 else:

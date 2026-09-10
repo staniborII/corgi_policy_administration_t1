@@ -409,3 +409,10 @@ Format:
 - **Assumption / evidence:** shadcn/ui Skeleton component already existed in the project. All screens already had error states (Alert with destructive variant) — Retry button was the missing piece.
 - **Alternatives considered:** Spinner (less polished than skeletons), auto-retry with backoff (adds complexity, user may not want automatic retries).
 - **Impact / follow-up:** All major screens now have three visual states: loading (skeletons), error (alert + retry), and empty (contextual message).
+
+## 2026-09-10 12:00 - Multi-provider KYB with Stripe Connect as default
+- **Decision:** Added Stripe Connect as a second KYB provider alongside Persona, with a Django admin toggle (`KYBProviderConfig`) to switch between Stripe Connect, Persona, and Simulated modes. Stripe Connect is the default.
+- **Reason:** Persona requires a registered business to access KYB features. Stripe Connect Express accounts handle business verification through Stripe's hosted onboarding, using the same Stripe keys already configured for payments.
+- **Assumption / evidence:** Stripe Connect Express accounts in test mode auto-verify with test data (EIN `000000000`, SSN `0000`). The `account.updated` webhook uses the same signature verification and idempotency infrastructure as payment webhooks.
+- **Alternatives considered:** Persona-only (blocked by registration requirement), Stripe Identity (individual verification only, not business KYB), removing KYB entirely (violates non-negotiable that broker must pass KYB before binding).
+- **Impact / follow-up:** `KYBVerification` model gains `provider`, `provider_reference`, and `onboarding_url` fields. `Broker` model gains `stripe_connect_account_id`. Persona code remains intact as an alternative. Frontend broker page shows provider-aware KYB details and opens Stripe onboarding in a new tab when available.

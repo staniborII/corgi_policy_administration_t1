@@ -27,7 +27,8 @@ def _bootstrap_django():
     django.setup()
 
 
-_bootstrap_django()
+if not os.environ.get("DJANGO_SETTINGS_MODULE"):
+    _bootstrap_django()
 
 from mcp.server.fastmcp import FastMCP  # noqa: E402
 
@@ -265,3 +266,7 @@ def create_action_request(
         "target": f"{target_type}:{target_id}",
         "requested_by": requested_by_username,
     }
+
+
+if __name__ == "__main__":
+    mcp.run()

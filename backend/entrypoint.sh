@@ -55,10 +55,14 @@ PYEOF
     fi
 fi
 
+# Collect static files (Django admin CSS/JS)
+echo "Collecting static files..."
+python manage.py collectstatic --noinput 2>/dev/null
+
 # Create superuser if credentials are provided and user doesn't exist
 if [ -n "$DJANGO_SUPERUSER_USERNAME" ] && [ -n "$DJANGO_SUPERUSER_PASSWORD" ]; then
     echo "Ensuring superuser exists..."
-    python manage.py createsuperuser --noinput 2>/dev/null || true
+    python manage.py ensure_superuser
 fi
 
 echo "Starting application server..."

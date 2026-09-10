@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Nav from "@/components/Nav";
@@ -12,11 +12,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 type VerifyState = "verifying" | "success" | "pending" | "error";
 
-export default function PaymentSuccessPage() {
+function PaymentSuccessContent() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("session_id");
   const [state, setState] = useState<VerifyState>("verifying");
-  const [payment, setPayment] = useState<PaymentRecord | null>(null);
+  const [, setPayment] = useState<PaymentRecord | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
 
   const verifyStarted = useRef(false);
@@ -139,5 +139,13 @@ export default function PaymentSuccessPage() {
         </div>
       </main>
     </>
+  );
+}
+
+export default function PaymentSuccessPage() {
+  return (
+    <Suspense fallback={<p>Loading...</p>}>
+      <PaymentSuccessContent />
+    </Suspense>
   );
 }

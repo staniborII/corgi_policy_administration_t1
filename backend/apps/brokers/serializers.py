@@ -6,7 +6,16 @@ from apps.brokers.models import Broker, KYBVerification
 class KYBVerificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = KYBVerification
-        fields = ("id", "status", "persona_inquiry_id", "created_at", "updated_at")
+        fields = (
+            "id",
+            "provider",
+            "provider_reference",
+            "persona_inquiry_id",
+            "status",
+            "onboarding_url",
+            "created_at",
+            "updated_at",
+        )
         read_only_fields = fields
 
 
@@ -21,11 +30,20 @@ class BrokerSerializer(serializers.ModelSerializer):
             "company_name",
             "status",
             "commission_rate_bps",
+            "stripe_connect_account_id",
             "created_at",
             "updated_at",
             "latest_kyb",
         )
-        read_only_fields = ("id", "user", "status", "created_at", "updated_at", "latest_kyb")
+        read_only_fields = (
+            "id",
+            "user",
+            "status",
+            "stripe_connect_account_id",
+            "created_at",
+            "updated_at",
+            "latest_kyb",
+        )
 
     def get_latest_kyb(self, obj):
         kyb = obj.kyb_verifications.order_by("-created_at").first()

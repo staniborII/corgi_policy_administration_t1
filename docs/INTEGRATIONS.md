@@ -1,6 +1,73 @@
 # Integrations
 
-## Persona (Broker KYB)
+## KYB Provider Configuration
+
+Broker KYB (Know Your Business) verification supports multiple providers. The active provider is configured in Django Admin under **Integrations > KYB Provider Configuration**.
+
+| Provider | Description |
+|----------|-------------|
+| **Stripe Connect** (default) | Creates Express connected accounts; brokers complete Stripe's hosted onboarding; `account.updated` webhooks drive state transitions |
+| **Persona** | Creates Persona inquiries; brokers complete Persona's verification flow; Persona webhooks drive state transitions |
+| **Simulated** | No real provider; generates `SIMULATED-` references; state must be advanced manually |
+
+The broker state machine is the same regardless of provider: `PENDING_KYB` → `APPROVED` | `REJECTED`.
+
+## Stripe Connect (Broker KYB — Default)
+
+### Flow
+
+```mermaid
+sequenceDiagram
+    participant S as Staff UI
+    participant API as Django API
+    participant St as Stripe Connect API
+
+    S->>API: POST /brokers/<id>/kyb/
+    API->>St: stripe.Account.create(type=express)
+    St-->>API: account_id (acct_xxx)
+    API->>St: stripe.AccountLink.create(account_onboarding)
+    St-->>API: onboarding_url
+    API-->>S: { provider, provider_reference, onboarding_url }
+    S->>St: Redirect broker to onboarding_url
+
+    Note over St: Broker completes Stripe hosted onboarding
+
+    St->>API: POST /integrations/webhooks/stripe/ (account.updated)
+    API->>API: verify Stripe signature
+    API->>API: record_webhook_event (idempotent)
+    API->>API: process_connect_account_updated
+    API-->>St: 200 OK
+```
+
+### Verification Logic
+
+The broker is considered **verified** when the Stripe Connect account meets ALL of:
+- `charges_enabled == True`
+- `requirements.currently_due` is empty
+
+The broker is **rejected** when:
+- `requirements.disabled_reason` starts with `"rejected"` (e.g., `"rejected.fraud"`)
+
+### Webhook Events
+
+| Stripe Event | Action |
+|-------------|--------|
+| `account.updated` | Check `charges_enabled` + `requirements`; approve or reject broker |
+
+### Idempotency & Out-of-Order Tolerance
+
+- Same `WebhookEvent` idempotency model as payment webhooks
+- Once a broker reaches `APPROVED` or `REJECTED`, the state never regresses
+- Late-arriving `account.updated` events for finalized brokers are silently accepted
+
+### Simulated Mode
+
+When `STRIPE_SECRET_KEY` is not configured:
+- `create_connect_account()` returns `SIMULATED-acct-{uuid}` instead of calling the real API
+- No onboarding URL is generated
+- The SIMULATED prefix is displayed in the UI as a warning
+
+## Persona (Broker KYB — Alternative)
 
 ### Flow
 
@@ -13,7 +80,7 @@ sequenceDiagram
     S->>API: POST /brokers/<id>/kyb/
     API->>P: POST /inquiries (create_persona_inquiry)
     P-->>API: inquiry_id
-    API-->>S: { inquiry_id }
+    API-->>S: { provider, provider_reference }
 
     Note over P: Broker completes verification flow
 
@@ -111,6 +178,7 @@ sequenceDiagram
 | `checkout.session.completed` | Find Payment by session_id, post ledger, activate policy |
 | `checkout.session.expired` | Mark Payment as FAILED, policy stays PENDING_PAYMENT for retry |
 | `charge.refunded` | Find Refund by stripe_refund_id, post refund + clawback ledger entries |
+| `account.updated` | Check Connect account verification status, approve/reject broker |
 
 ### Stripe Refund Flow (Cancellation)
 

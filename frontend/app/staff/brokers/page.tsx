@@ -20,6 +20,7 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 
 export default function BrokersPage() {
   const { user, loading } = useAuth();
@@ -32,7 +33,7 @@ export default function BrokersPage() {
 
   const [form, setForm] = useState({
     company_name: "",
-    commission_rate_bps: "1500",
+    commission_rate_percent: "15",
     contact_email: "",
     contact_first_name: "",
     contact_last_name: "",
@@ -67,12 +68,13 @@ export default function BrokersPage() {
     setCreateError("");
     setCreating(true);
     try {
+      const { commission_rate_percent, ...rest } = form;
       await api.createBroker({
-        ...form,
-        commission_rate_bps: parseInt(form.commission_rate_bps, 10),
+        ...rest,
+        commission_rate_bps: Math.round(parseFloat(commission_rate_percent) * 100),
       });
       setShowCreate(false);
-      setForm({ company_name: "", commission_rate_bps: "1500", contact_email: "", contact_first_name: "", contact_last_name: "" });
+      setForm({ company_name: "", commission_rate_percent: "15", contact_email: "", contact_first_name: "", contact_last_name: "" });
       await loadBrokers();
     } catch (err) {
       setCreateError(err instanceof ApiError ? JSON.stringify(err.body) : "Failed to create broker.");
@@ -83,14 +85,28 @@ export default function BrokersPage() {
 
   async function handleInitiateKyb(brokerId: number) {
     try {
-      const result = await api.initiateKyb(brokerId);
-      alert(`KYB initiated. Inquiry ID: ${result.inquiry_id}`);
+      const kyb = await api.initiateKyb(brokerId);
+      if (kyb.onboarding_url) {
+        window.open(kyb.onboarding_url, "_blank", "noopener");
+      } else {
+        alert(`KYB initiated (${kyb.provider}). Reference: ${kyb.provider_reference}`);
+      }
       await loadBrokers();
       if (selectedBroker?.id === brokerId) {
         setSelectedBroker(await api.getBroker(brokerId));
       }
     } catch (err) {
-      alert(err instanceof ApiError ? JSON.stringify(err.body) : "Failed to initiate KYB.");
+      const msg = err instanceof ApiError ? (err.body?.detail || JSON.stringify(err.body)) : "Failed to initiate KYB.";
+      alert(msg);
+    }
+  }
+
+  function getProviderLabel(provider: string) {
+    switch (provider) {
+      case "STRIPE_CONNECT": return "Stripe Connect";
+      case "PERSONA": return "Persona";
+      case "SIMULATED": return "Simulated";
+      default: return provider;
     }
   }
 
@@ -119,7 +135,6 @@ export default function BrokersPage() {
               <form onSubmit={handleCreate} className="space-y-4">
                 {[
                   { label: "Company Name", key: "company_name" },
-                  { label: "Commission Rate (bps)", key: "commission_rate_bps" },
                   { label: "Contact Email", key: "contact_email" },
                   { label: "Contact First Name", key: "contact_first_name" },
                   { label: "Contact Last Name", key: "contact_last_name" },
@@ -134,6 +149,24 @@ export default function BrokersPage() {
                     />
                   </div>
                 ))}
+                <div className="space-y-1">
+                  <Label htmlFor="commission_rate_percent">Commission Rate (%)</Label>
+                  <div className="relative">
+                    <Input
+                      id="commission_rate_percent"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      value={form.commission_rate_percent}
+                      onChange={(e) => setForm({ ...form, commission_rate_percent: e.target.value })}
+                      required
+                      className="pr-8"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">e.g. 15 = 15% commission on premium</p>
+                </div>
                 {createError && (
                   <Alert variant="destructive">
                     <AlertDescription>{createError}</AlertDescription>
@@ -201,15 +234,39 @@ export default function BrokersPage() {
                 Status: <StatusBadge status={selectedBroker.status} />
               </p>
               <p>Commission: {(selectedBroker.commission_rate_bps / 100).toFixed(2)}%</p>
+              {selectedBroker.stripe_connect_account_id && (
+                <p className="text-sm text-muted-foreground">
+                  Stripe Connect: {selectedBroker.stripe_connect_account_id}
+                </p>
+              )}
               {selectedBroker.latest_kyb && (
                 <div className="mt-2 space-y-1">
                   <h3 className="text-lg font-semibold">Latest KYB Verification</h3>
-                  <p>Inquiry ID: {selectedBroker.latest_kyb.persona_inquiry_id}</p>
+                  <div className="flex items-center gap-2">
+                    <span>Provider:</span>
+                    <Badge variant="outline">{getProviderLabel(selectedBroker.latest_kyb.provider)}</Badge>
+                  </div>
+                  <p>Reference: {selectedBroker.latest_kyb.provider_reference}</p>
                   <p>Status: {selectedBroker.latest_kyb.status}</p>
-                  {selectedBroker.latest_kyb.persona_inquiry_id.startsWith("SIMULATED") && (
+                  {selectedBroker.latest_kyb.provider === "SIMULATED" && (
                     <p className="font-bold text-amber-500">
-                      SIMULATED — No real Persona credentials configured
+                      SIMULATED — No real provider configured
                     </p>
+                  )}
+                  {selectedBroker.latest_kyb.provider_reference.startsWith("SIMULATED") && (
+                    <p className="font-bold text-amber-500">
+                      SIMULATED — Provider credentials not configured
+                    </p>
+                  )}
+                  {selectedBroker.latest_kyb.onboarding_url && selectedBroker.latest_kyb.status === "PENDING" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2"
+                      onClick={() => window.open(selectedBroker.latest_kyb!.onboarding_url, "_blank", "noopener")}
+                    >
+                      Open Onboarding Link
+                    </Button>
                   )}
                 </div>
               )}

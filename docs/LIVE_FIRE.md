@@ -4,20 +4,54 @@
 
 | Provider | Mode | Status |
 |----------|------|--------|
-| Persona | Sandbox | Ready (set `PERSONA_API_KEY`, `PERSONA_WEBHOOK_SECRET`, `PERSONA_TEMPLATE_ID`) |
-| Stripe | Test mode | Ready (set `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`) |
+| Stripe Connect (KYB) | Test mode | Default KYB provider (set `STRIPE_SECRET_KEY`) |
+| Persona (KYB) | Sandbox | Alternative (set `PERSONA_API_KEY`, `PERSONA_WEBHOOK_SECRET`, `PERSONA_TEMPLATE_ID`) |
+| Stripe (Payments) | Test mode | Ready (set `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`) |
 | Bank verification | SIMULATED | Adapter-based, labelled SIMULATED |
 | Payout rail | SIMULATED | Adapter-based, labelled SIMULATED |
 
-## Persona Sandbox Testing
+## KYB Provider Selection
+
+The active KYB provider is configurable via Django Admin (**Integrations > KYB Provider Configuration**). Default is Stripe Connect.
+
+## Stripe Connect KYB Testing (Default)
 
 ### Prerequisites
-1. Set environment variables:
+1. Stripe test-mode keys already configured (`STRIPE_SECRET_KEY`, etc.)
+2. Forward webhooks locally:
+   ```bash
+   stripe listen --forward-to localhost:8000/api/integrations/webhooks/stripe/
+   ```
+   Ensure `account.updated` events are included (the CLI forwards all events by default).
+
+### Test Flow
+1. Staff creates a broker via `/staff/brokers`
+2. Staff clicks "Initiate KYB" — creates a Stripe Connect Express account
+3. A new tab opens with Stripe's hosted onboarding form
+4. Complete the onboarding with test data:
+   - EIN: `000000000` (auto-verifies)
+   - SSN last 4: `0000` (auto-verifies)
+   - Any valid US address and DOB
+5. Stripe sends `account.updated` webhook → `stripe listen` forwards it
+6. Backend checks `charges_enabled` → broker transitions to APPROVED
+7. Staff can now create policies through the approved broker
+
+### Simulated Mode
+When `STRIPE_SECRET_KEY` is not configured:
+- KYB initiation returns a `SIMULATED-acct-{uuid}` account ID
+- No onboarding URL is generated
+- UI displays a "SIMULATED" warning
+
+## Persona Sandbox Testing (Alternative)
+
+### Prerequisites
+1. Switch KYB provider to "Persona" in Django Admin
+2. Set environment variables:
    - `PERSONA_API_KEY` — sandbox API key from Persona dashboard
    - `PERSONA_WEBHOOK_SECRET` — webhook signing secret
    - `PERSONA_TEMPLATE_ID` — business verification template ID
 
-2. Configure Persona webhook endpoint:
+3. Configure Persona webhook endpoint:
    - URL: `{your_base_url}/api/integrations/webhooks/persona/`
    - For local development, use ngrok or similar tunnel
 
