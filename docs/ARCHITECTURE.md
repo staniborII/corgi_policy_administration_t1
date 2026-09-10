@@ -85,7 +85,7 @@ flowchart TB
 
 **Health check**: `GET /health/` returns `{"status": "ok"}` — suitable for ALB health checks.
 
-**Migrations**: Run as a separate one-off task, never on container startup.
+**Migrations**: Run in `entrypoint.sh` on container startup, after database readiness check.
 
 **Secrets**: All configuration via environment variables — nothing baked into the image.
 
@@ -288,8 +288,8 @@ flowchart TB
 | `CorgiNetwork` | VPC, subnets, NAT, VPC endpoints, ALB/ECS SGs | Network foundation |
 | `CorgiDatabase` | RDS PostgreSQL, RDS Proxy, DB SGs, DB secret (auto-gen password) | Data tier |
 | `CorgiCache` | ElastiCache Redis (cache.t4g.micro, single node, private subnets) | Channel layer for WebSocket |
-| `CorgiEcs` | ECS Fargate, public ALB, ECR, app secrets, optional Route 53 + HTTPS | Compute tier |
-| `CorgiFrontend` | S3 buckets, CloudFront, WAF, OAC, optional Route 53 + custom domain | CDN and static hosting |
+| `CorgiEcs` | ECS Fargate, public ALB, app secrets, migration trigger, optional Route 53 + HTTPS | Compute tier |
+| `CorgiFrontend` | S3 bucket, CloudFront, WAF, OAC, BucketDeployment (auto-build + upload), optional Route 53 + custom domain | CDN and static hosting |
 
 ### Environment Configuration
 
@@ -315,6 +315,13 @@ environments:
 ```
 
 Deploy with: `npx cdk deploy --all -c stage=staging`
+
+**What happens on `cdk deploy`:**
+1. CDK `build` command runs `npm ci && npm run build` in `frontend/` (static export to `out/`)
+2. Backend Docker image built from `backend/Dockerfile` via `ContainerImage.fromAsset`
+3. `BucketDeployment` uploads `frontend/out/` to S3, invalidates CloudFront (`/*`)
+4. ECS Fargate service rolling-updates to the new image
+5. Container `entrypoint.sh` waits for DB, runs `migrate --noinput`, `collectstatic`, `ensure_superuser`, then starts Daphne
 
 **Stack deploy order:** Network → Database → Cache → ECS → Frontend
 

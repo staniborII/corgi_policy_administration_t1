@@ -416,3 +416,23 @@ Format:
 - **Assumption / evidence:** Stripe Connect Express accounts in test mode auto-verify with test data (EIN `000000000`, SSN `0000`). The `account.updated` webhook uses the same signature verification and idempotency infrastructure as payment webhooks.
 - **Alternatives considered:** Persona-only (blocked by registration requirement), Stripe Identity (individual verification only, not business KYB), removing KYB entirely (violates non-negotiable that broker must pass KYB before binding).
 - **Impact / follow-up:** `KYBVerification` model gains `provider`, `provider_reference`, and `onboarding_url` fields. `Broker` model gains `stripe_connect_account_id`. Persona code remains intact as an alternative. Frontend broker page shows provider-aware KYB details and opens Stripe onboarding in a new tab when available.
+
+## 2026-09-10 - Automated frontend deploy via CDK BucketDeployment
+- **Decision:** Frontend build and S3 upload are automated in CDK via `s3deploy.BucketDeployment` with local bundling (reuses `out/` if pre-built) and Docker fallback. The `cdk.json` `build` command runs `npm ci && npm run build` before synth. `.env.production` sets `NEXT_PUBLIC_API_URL=` (empty) so API calls use relative URLs via CloudFront proxy.
+- **Reason:** Manual `aws s3 sync` steps are error-prone and easy to forget. CDK deploy should be a single command.
+- **Assumption / evidence:** CloudFront already proxies `/api/*` to the ALB. With `NEXT_PUBLIC_API_URL=` empty, `API_BASE` becomes `""` and all fetch calls use relative paths — correct for same-domain CloudFront routing.
+- **Alternatives considered:** `Source.asset` with bundling only (no `cdk.json build` — caused test flakiness with npm ci file locking), manual `aws s3 sync` (user explicitly asked for automation).
+- **Impact / follow-up:** CloudFront `/*` invalidation fires on every deploy. `frontend/out/` should be in `.gitignore`.
+
+## 2026-09-10 - Migrations in entrypoint.sh
+- **Decision:** `python manage.py migrate --noinput` runs in `entrypoint.sh` on every container start, after the database readiness check and before collectstatic.
+- **Reason:** Simpler than a CDK `AwsCustomResource` calling `ecs:RunTask`. The entrypoint already waits for the database, so migrations run at the right time with zero infra complexity.
+- **Alternatives considered:** `AwsCustomResource` with `ecs:RunTask` (too much CDK ceremony for a single `manage.py` command), separate ECS migration task (requires manual trigger or orchestration).
+- **Impact / follow-up:** With `desiredCount: 1`, only one container runs migrations. If scaling to multiple tasks, a migration lock (e.g., `django-migration-locking`) would be needed to avoid concurrent migration races.
+
+## 2026-09-10 - Stripe Connect v2 Accounts API
+- **Decision:** Migrated from Stripe Accounts v1 (`stripe.Account.create(type="express")`) to v2 (`StripeClient.v2.core.accounts.create()`) for Connect account creation and onboarding links. Webhook handler and `retrieve_account_status` remain on v1 (interoperable with v2 accounts).
+- **Reason:** Stripe deprecated Accounts v1 for new integrations. `stripe.Account.create()` returns an error directing to `/v2/core/accounts`.
+- **Assumption / evidence:** v2 accounts are interoperable with v1 APIs per Stripe docs. The `account.updated` webhook sends v1-format payloads regardless of account creation API version. `stripe.Account.retrieve()` works with v2-created account IDs.
+- **Alternatives considered:** Enabling v1 support in Stripe Dashboard (`feat_accounts_v1_support`) — quick workaround but deprecated path.
+- **Impact / follow-up:** Uses `StripeClient` (instance-based) for v2 calls instead of module-level `stripe.api_key`. Express dashboard requires `fees_collector: "application"` and `losses_collector: "application"`.

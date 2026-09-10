@@ -84,11 +84,18 @@ export default function BrokersPage() {
   }
 
   async function handleInitiateKyb(brokerId: number) {
+    // Open blank window synchronously so browsers don't block it as a popup
+    const onboardingWindow = window.open("about:blank", "_blank");
     try {
       const kyb = await api.initiateKyb(brokerId);
       if (kyb.onboarding_url) {
-        window.open(kyb.onboarding_url, "_blank", "noopener");
+        if (onboardingWindow) {
+          onboardingWindow.location.href = kyb.onboarding_url;
+        } else {
+          window.location.href = kyb.onboarding_url;
+        }
       } else {
+        onboardingWindow?.close();
         alert(`KYB initiated (${kyb.provider}). Reference: ${kyb.provider_reference}`);
       }
       await loadBrokers();
@@ -96,6 +103,7 @@ export default function BrokersPage() {
         setSelectedBroker(await api.getBroker(brokerId));
       }
     } catch (err) {
+      onboardingWindow?.close();
       const msg = err instanceof ApiError ? (err.body?.detail || JSON.stringify(err.body)) : "Failed to initiate KYB.";
       alert(msg);
     }

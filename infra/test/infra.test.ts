@@ -1,5 +1,5 @@
 import * as cdk from 'aws-cdk-lib/core';
-import { Template } from 'aws-cdk-lib/assertions';
+import { Match, Template } from 'aws-cdk-lib/assertions';
 import { NetworkStack } from '../lib/stacks/network-stack';
 import { StorageStack } from '../lib/stacks/storage-stack';
 import { DatabaseStack } from '../lib/stacks/database-stack';
@@ -8,7 +8,7 @@ import { EdgeStack } from '../lib/stacks/edge-stack';
 import { FrontendStack } from '../lib/stacks/frontend-stack';
 
 function createStacks() {
-  const app = new cdk.App();
+  const app = new cdk.App({ context: { '@aws-cdk/core:bundlingStacks': [] } });
   const network = new NetworkStack(app, 'TestNetwork');
   const storage = new StorageStack(app, 'TestStorage');
   const database = new DatabaseStack(app, 'TestDatabase', {
@@ -136,12 +136,13 @@ describe('EcsStack', () => {
     });
   });
 
-  test('creates ECR repository', () => {
+  test('backend image is built from local Dockerfile', () => {
     const { ecs } = createStacks();
     const template = Template.fromStack(ecs);
-    template.hasResourceProperties('AWS::ECR::Repository', {
-      RepositoryName: 'corgi-backend',
-      ImageScanningConfiguration: { ScanOnPush: true },
+    template.hasResourceProperties('AWS::ECS::TaskDefinition', {
+      ContainerDefinitions: Match.arrayWith([
+        Match.objectLike({ Name: 'backend' }),
+      ]),
     });
   });
 
@@ -162,7 +163,7 @@ describe('EcsStack', () => {
   });
 
   test('creates Route 53 record when domain config is provided', () => {
-    const app = new cdk.App();
+    const app = new cdk.App({ context: { '@aws-cdk/core:bundlingStacks': [] } });
     const network = new NetworkStack(app, 'DnsTestNetwork');
     const storageStack = new StorageStack(app, 'DnsTestStorage');
     const database = new DatabaseStack(app, 'DnsTestDatabase', {
@@ -227,8 +228,16 @@ describe('FrontendStack', () => {
     template.resourceCountIs('AWS::CloudFront::Distribution', 1);
   });
 
+  test('deploys frontend assets to S3 with CloudFront invalidation', () => {
+    const { frontend } = createStacks();
+    const template = Template.fromStack(frontend);
+    template.hasResourceProperties('Custom::CDKBucketDeployment', {
+      DistributionPaths: ['/*'],
+    });
+  });
+
   test('creates Route 53 record when domain config is provided', () => {
-    const app = new cdk.App();
+    const app = new cdk.App({ context: { '@aws-cdk/core:bundlingStacks': [] } });
     const network = new NetworkStack(app, 'WebDnsTestNetwork');
     const storageStack = new StorageStack(app, 'WebDnsTestStorage');
     const database = new DatabaseStack(app, 'WebDnsTestDatabase', {

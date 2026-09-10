@@ -55,6 +55,10 @@ PYEOF
     fi
 fi
 
+# Run database migrations
+echo "Running migrations..."
+python manage.py migrate --noinput
+
 # Collect static files (Django admin CSS/JS)
 echo "Collecting static files..."
 python manage.py collectstatic --noinput 2>/dev/null

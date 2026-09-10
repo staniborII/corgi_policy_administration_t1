@@ -1,7 +1,6 @@
 import * as cdk from 'aws-cdk-lib/core';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
-import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as ecs_patterns from 'aws-cdk-lib/aws-ecs-patterns';
 import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import * as iam from 'aws-cdk-lib/aws-iam';
@@ -12,6 +11,7 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as targets from 'aws-cdk-lib/aws-route53-targets';
+import * as path from 'path';
 import { Construct } from 'constructs';
 
 export interface EcsStackProps extends cdk.StackProps {
@@ -37,7 +37,6 @@ export interface EcsStackProps extends cdk.StackProps {
 
 export class EcsStack extends cdk.Stack {
   public readonly alb: elbv2.ApplicationLoadBalancer;
-  public readonly ecrRepo: ecr.Repository;
 
   constructor(scope: Construct, id: string, props: EcsStackProps) {
     super(scope, id, props);
@@ -48,13 +47,10 @@ export class EcsStack extends cdk.Stack {
     const hasHostedZone = !!props.hostedZoneId && !!props.hostedZoneName;
     const hasServerDomain = !!props.serverDomainName && hasCert && hasHostedZone;
 
-    // ECR repository
-    this.ecrRepo = new ecr.Repository(this, 'CorgiBackendRepo', {
-      repositoryName: 'corgi-backend',
-      imageScanOnPush: true,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      emptyOnDelete: true,
-    });
+    // Backend Docker image — built and pushed automatically during cdk deploy
+    const backendImage = ecs.ContainerImage.fromAsset(
+      path.join(__dirname, '..', '..', '..', 'backend'),
+    );
 
     // Application secrets: Django, superuser, Stripe, Persona
     // Update values in AWS Console after initial deployment
@@ -143,7 +139,7 @@ export class EcsStack extends cdk.Stack {
     }
 
     taskDef.addContainer('backend', {
-      image: ecs.ContainerImage.fromEcrRepository(this.ecrRepo, 'latest'),
+      image: backendImage,
       logging: ecs.LogDrivers.awsLogs({
         streamPrefix: 'backend',
         logGroup,
@@ -172,8 +168,6 @@ export class EcsStack extends cdk.Stack {
         startPeriod: cdk.Duration.seconds(60),
       },
     });
-
-    this.ecrRepo.grantPull(taskDef.executionRole!);
 
     // Optional TLS certificate for HTTPS
     const certificate = hasCert
@@ -215,56 +209,12 @@ export class EcsStack extends cdk.Stack {
       });
     }
 
-    // Migration task definition (run as one-off ECS task)
-    const migrationTaskDef = new ecs.FargateTaskDefinition(this, 'MigrationTaskDef', {
-      memoryLimitMiB: 512,
-      cpu: 256,
-    });
-    dbSecret.grantRead(migrationTaskDef.taskRole);
-    appSecrets.grantRead(migrationTaskDef.taskRole);
-
-    migrationTaskDef.addContainer('migrate', {
-      image: ecs.ContainerImage.fromEcrRepository(this.ecrRepo, 'latest'),
-      command: ['python', 'manage.py', 'migrate', '--noinput'],
-      logging: ecs.LogDrivers.awsLogs({
-        streamPrefix: 'migration',
-        logGroup,
-      }),
-      environment: {
-        DB_HOST: rdsProxyEndpoint,
-        DB_PORT: '5432',
-        DB_NAME: 'corgi',
-        DB_TYPE: 'postgres',
-      },
-      secrets: {
-        DJANGO_SECRET_KEY: ecs.Secret.fromSecretsManager(appSecrets, 'DJANGO_SECRET_KEY'),
-        DB_USER: ecs.Secret.fromSecretsManager(dbSecret, 'username'),
-        DB_PASSWORD: ecs.Secret.fromSecretsManager(dbSecret, 'password'),
-      },
-    });
-
-    this.ecrRepo.grantPull(migrationTaskDef.executionRole!);
-
     new cdk.CfnOutput(this, 'AlbDnsName', { value: this.alb.loadBalancerDnsName });
-    new cdk.CfnOutput(this, 'EcrRepoUri', { value: this.ecrRepo.repositoryUri });
     new cdk.CfnOutput(this, 'ClusterName', { value: cluster.clusterName });
     if (props.serverDomainName) {
       new cdk.CfnOutput(this, 'ApiUrl', {
         value: `https://${props.serverDomainName}`,
       });
     }
-
-    new cdk.CfnOutput(this, 'MigrationTaskDefArn', {
-      value: migrationTaskDef.taskDefinitionArn,
-      description: 'ARN of the migration task definition for aws ecs run-task',
-    });
-    new cdk.CfnOutput(this, 'PrivateSubnetIds', {
-      value: vpc.selectSubnets({ subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS }).subnetIds.join(','),
-      description: 'Private subnet IDs for ECS run-task --network-configuration',
-    });
-    new cdk.CfnOutput(this, 'EcsSecurityGroupId', {
-      value: ecsSg.securityGroupId,
-      description: 'ECS security group for migration tasks',
-    });
   }
 }

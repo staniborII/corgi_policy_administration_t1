@@ -1,5 +1,6 @@
 import * as cdk from 'aws-cdk-lib/core';
 import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
@@ -7,6 +8,7 @@ import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as targets from 'aws-cdk-lib/aws-route53-targets';
+import * as path from 'path';
 import { Construct } from 'constructs';
 
 export interface FrontendStackProps extends cdk.StackProps {
@@ -145,6 +147,51 @@ export class FrontendStack extends cdk.Stack {
         target: route53.RecordTarget.fromAlias(new targets.CloudFrontTarget(this.distribution)),
       });
     }
+
+    // Build and deploy frontend to S3, invalidate CloudFront
+    // The `build` command in cdk.json runs `npm run build` before synth.
+    // Local bundling reuses existing out/ if available, or builds fresh.
+    const frontendPath = path.join(__dirname, '..', '..', '..', 'frontend');
+
+    new s3deploy.BucketDeployment(this, 'DeployFrontend', {
+      sources: [
+        s3deploy.Source.asset(frontendPath, {
+          exclude: ['node_modules', '.next'],
+          bundling: {
+            image: cdk.DockerImage.fromRegistry('node:20-slim'),
+            command: [
+              'bash', '-c',
+              'cd /asset-input && npm ci && npm run build && cp -r out/* /asset-output/',
+            ],
+            environment: { NEXT_PUBLIC_API_URL: '' },
+            local: {
+              tryBundle(outputDir: string): boolean {
+                const fs = require('fs');
+                const outDir = path.join(frontendPath, 'out');
+
+                if (fs.existsSync(path.join(outDir, 'index.html'))) {
+                  fs.cpSync(outDir, outputDir, { recursive: true });
+                  return true;
+                }
+
+                try {
+                  const { execSync } = require('child_process');
+                  execSync('npm ci', { cwd: frontendPath, stdio: 'inherit' });
+                  execSync('npm run build', { cwd: frontendPath, stdio: 'inherit' });
+                  fs.cpSync(outDir, outputDir, { recursive: true });
+                  return true;
+                } catch {
+                  return false;
+                }
+              },
+            },
+          },
+        }),
+      ],
+      destinationBucket: this.frontendBucket,
+      distribution: this.distribution,
+      distributionPaths: ['/*'],
+    });
 
     const frontendUrl = hasWebDomain
       ? `https://${props.webDomainName}`

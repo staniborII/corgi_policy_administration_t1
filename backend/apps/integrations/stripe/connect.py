@@ -3,60 +3,88 @@ import uuid
 
 import stripe
 from django.conf import settings
+from stripe import StripeClient
 
 logger = logging.getLogger(__name__)
 
 SIMULATED_PREFIX = "SIMULATED"
 
 
+def _get_client():
+    """Return a StripeClient for v2 API calls, or None if not configured."""
+    secret_key = settings.STRIPE_SECRET_KEY
+    if not secret_key:
+        return None
+    return StripeClient(secret_key)
+
+
 def create_connect_account(*, reference_id, company_name):
     """
-    Create a Stripe Connect Express account for broker KYB onboarding.
+    Create a Stripe Connect account (v2 API) for broker KYB onboarding.
     Returns the account ID, or a simulated ID if Stripe keys are not configured.
     """
-    secret_key = settings.STRIPE_SECRET_KEY
+    client = _get_client()
 
-    if not secret_key:
+    if not client:
         simulated_id = f"{SIMULATED_PREFIX}-acct-{uuid.uuid4().hex[:12]}"
         logger.warning("STRIPE_SECRET_KEY not configured — returning SIMULATED Connect account: %s", simulated_id)
         return simulated_id
 
-    stripe.api_key = secret_key
-
-    account = stripe.Account.create(
-        type="express",
-        country="US",
-        business_type="company",
-        company={"name": company_name},
-        metadata={"reference_id": reference_id, "source": "corgi_kyb"},
-        capabilities={
-            "card_payments": {"requested": True},
-            "transfers": {"requested": True},
-        },
+    account = client.v2.core.accounts.create(
+        {
+            "display_name": company_name,
+            "dashboard": "express",
+            "identity": {
+                "country": "US",
+                "entity_type": "company",
+                "business_details": {
+                    "registered_name": company_name,
+                },
+            },
+            "defaults": {
+                "responsibilities": {
+                    "fees_collector": "application",
+                    "losses_collector": "application",
+                }
+            },
+            "configuration": {
+                "merchant": {
+                    "capabilities": {
+                        "card_payments": {"requested": True},
+                    }
+                },
+            },
+            "metadata": {"reference_id": reference_id, "source": "corgi_kyb"},
+        }
     )
 
-    logger.info("Stripe Connect account created: account_id=%s, reference=%s", account.id, reference_id)
+    logger.info("Stripe Connect v2 account created: account_id=%s, reference=%s", account.id, reference_id)
     return account.id
 
 
 def create_account_link(*, account_id, refresh_url, return_url):
     """
-    Create a Stripe Account Link for hosted onboarding.
+    Create a Stripe Account Link (v2 API) for hosted onboarding.
     Returns the onboarding URL, or None in simulated mode.
     """
-    secret_key = settings.STRIPE_SECRET_KEY
+    client = _get_client()
 
-    if not secret_key or account_id.startswith(SIMULATED_PREFIX):
+    if not client or account_id.startswith(SIMULATED_PREFIX):
         logger.warning("Simulated mode — no real onboarding URL for account %s", account_id)
         return None
 
-    stripe.api_key = secret_key
-
-    account_link = stripe.AccountLink.create(
-        account=account_id,
-        type="account_onboarding",
-        refresh_url=refresh_url,
-        return_url=return_url,
+    account_link = client.v2.core.account_links.create(
+        {
+            "account": account_id,
+            "use_case": {
+                "type": "account_onboarding",
+                "account_onboarding": {
+                    "configurations": ["merchant"],
+                    "refresh_url": refresh_url,
+                    "return_url": return_url,
+                },
+            },
+        }
     )
 
     logger.info("Account link created for %s", account_id)
@@ -66,6 +94,7 @@ def create_account_link(*, account_id, refresh_url, return_url):
 def retrieve_account_status(account_id):
     """
     Retrieve the verification status of a Stripe Connect account.
+    Uses v1 Account.retrieve which is interoperable with v2 accounts.
     Returns a dict with charges_enabled, payouts_enabled, requirements_due, disabled_reason.
     """
     secret_key = settings.STRIPE_SECRET_KEY
