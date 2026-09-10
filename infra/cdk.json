@@ -1,6 +1,6 @@
 {
   "app": "npx ts-node --prefer-ts-exts bin/infra.ts",
-  "build": "cd ../frontend && npm ci && npm run build",
+  "build": "cd ../frontend && npm install && npm run build",
   "watch": {
     "include": [
       "**"

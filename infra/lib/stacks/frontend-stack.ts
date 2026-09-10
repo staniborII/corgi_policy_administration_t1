@@ -161,7 +161,7 @@ export class FrontendStack extends cdk.Stack {
             image: cdk.DockerImage.fromRegistry('node:20-slim'),
             command: [
               'bash', '-c',
-              'cd /asset-input && npm ci && npm run build && cp -r out/* /asset-output/',
+              'cd /asset-input && npm install && npm run build && cp -r out/* /asset-output/',
             ],
             environment: { NEXT_PUBLIC_API_URL: '' },
             local: {
@@ -176,7 +176,7 @@ export class FrontendStack extends cdk.Stack {
 
                 try {
                   const { execSync } = require('child_process');
-                  execSync('npm ci', { cwd: frontendPath, stdio: 'inherit' });
+                  execSync('npm install', { cwd: frontendPath, stdio: 'inherit' });
                   execSync('npm run build', { cwd: frontendPath, stdio: 'inherit' });
                   fs.cpSync(outDir, outputDir, { recursive: true });
                   return true;
