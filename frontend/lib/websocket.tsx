@@ -37,8 +37,24 @@ const RECONNECT_DELAY_MS = 3000;
 export function WebSocketProvider({ children }: { children: ReactNode }) {
   const subscriptions = useRef<Set<Subscription>>(new Set());
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [connected, setConnected] = useState(false);
+
+  const cleanup = useCallback(() => {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    if (wsRef.current) {
+      wsRef.current.onopen = null;
+      wsRef.current.onclose = null;
+      wsRef.current.onerror = null;
+      wsRef.current.onmessage = null;
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    setConnected(false);
+  }, []);
 
   const connect = useCallback(() => {
     const token = getToken();
@@ -50,12 +66,19 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
-    ws.onopen = () => setConnected(true);
+    ws.onopen = () => {
+      if (wsRef.current !== ws) {
+        ws.close();
+        return;
+      }
+      setConnected(true);
+    };
 
     ws.onclose = () => {
-      setConnected(false);
+      if (wsRef.current !== ws) return;
       wsRef.current = null;
-      reconnectTimer.current = setTimeout(connect, RECONNECT_DELAY_MS);
+      setConnected(false);
+      reconnectTimerRef.current = setTimeout(connect, RECONNECT_DELAY_MS);
     };
 
     ws.onerror = () => ws.close();
@@ -76,12 +99,12 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    connect();
+    const timer = setTimeout(connect, 0);
     return () => {
-      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-      wsRef.current?.close();
+      clearTimeout(timer);
+      cleanup();
     };
-  }, [connect]);
+  }, [connect, cleanup]);
 
   const subscribe = useCallback((prefix: string, handler: Handler) => {
     const sub: Subscription = { prefix, handler };

@@ -159,16 +159,23 @@ DOCUMENTS_BUCKET_NAME = os.environ.get("DOCUMENTS_BUCKET_NAME", "")
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 
 # Redis / Channels
-REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+REDIS_URL = os.environ.get("REDIS_URL", "")
 
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {
-            "hosts": [REDIS_URL],
+if REDIS_URL:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [REDIS_URL],
+            },
         },
-    },
-}
+    }
+else:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer",
+        },
+    }
 
 # Stripe
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
