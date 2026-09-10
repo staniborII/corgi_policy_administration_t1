@@ -55,7 +55,7 @@ export class DatabaseStack extends cdk.Stack {
 
     const dbInstance = new rds.DatabaseInstance(this, 'CorgiDb', {
       engine: rds.DatabaseInstanceEngine.postgres({
-        version: rds.PostgresEngineVersion.VER_16_4,
+        version: rds.PostgresEngineVersion.VER_16,
       }),
       instanceType: new ec2.InstanceType(props.dbInstanceType),
       vpc,
