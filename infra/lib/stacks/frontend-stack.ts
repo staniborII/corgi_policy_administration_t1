@@ -176,8 +176,9 @@ export class FrontendStack extends cdk.Stack {
 
                 try {
                   const { execSync } = require('child_process');
-                  execSync('npm install', { cwd: frontendPath, stdio: 'inherit' });
-                  execSync('npm run build', { cwd: frontendPath, stdio: 'inherit' });
+                  const env = { ...process.env, NEXT_PUBLIC_API_URL: '' };
+                  execSync('npm install', { cwd: frontendPath, stdio: 'inherit', env });
+                  execSync('npm run build', { cwd: frontendPath, stdio: 'inherit', env });
                   fs.cpSync(outDir, outputDir, { recursive: true });
                   return true;
                 } catch {

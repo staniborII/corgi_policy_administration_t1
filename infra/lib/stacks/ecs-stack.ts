@@ -111,7 +111,7 @@ export class EcsStack extends cdk.Stack {
     const rdsProxyEndpoint = rdsProxy.endpoint;
 
     const albDns = this.alb.loadBalancerDnsName;
-    const hostParts = [albDns];
+    const hostParts = [albDns, '.cloudfront.net'];
     if (props.serverDomainName) hostParts.push(props.serverDomainName);
     if (props.webDomainName) hostParts.push(props.webDomainName);
 
